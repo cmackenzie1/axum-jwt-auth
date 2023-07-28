@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::extract::FromRef;
 use axum::headers::authorization::Bearer;
 use axum::headers::Authorization;
@@ -7,17 +5,13 @@ use axum::http::StatusCode;
 use axum::response::Response;
 use axum::{async_trait, http::request::Parts, response::IntoResponse};
 use axum::{RequestPartsExt, TypedHeader};
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
-use crate::{JwtDecoder, RemoteJwksDecoder};
+use crate::{Decoder, JwtDecoder};
 
 #[derive(Debug, Deserialize)]
-pub struct Claims {
-    pub sub: String,
-    pub name: String,
-    pub iat: u64,
-    pub exp: u64,
-}
+pub struct Claims<T>(pub T);
 
 pub enum AuthError {
     InvalidToken,
@@ -43,14 +37,15 @@ impl IntoResponse for AuthError {
 
 #[derive(Clone, FromRef)]
 pub struct JwtDecoderState {
-    pub decoder: Arc<RemoteJwksDecoder>,
+    pub decoder: Decoder,
 }
 
 #[async_trait]
-impl<S> axum::extract::FromRequestParts<S> for Claims
+impl<S, T> axum::extract::FromRequestParts<S> for Claims<T>
 where
     JwtDecoderState: FromRef<S>,
     S: Send + Sync,
+    T: DeserializeOwned,
 {
     type Rejection = AuthError;
 
