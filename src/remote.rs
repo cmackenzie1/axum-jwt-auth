@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use std::sync::{Arc, RwLock};
 
 use jsonwebtoken::{jwk::JwkSet, DecodingKey, TokenData, Validation};
@@ -104,7 +103,6 @@ impl RemoteJwksDecoder {
     }
 }
 
-#[async_trait]
 impl<T> JwtDecoder<T> for RemoteJwksDecoder
 where
     T: for<'de> DeserializeOwned,
