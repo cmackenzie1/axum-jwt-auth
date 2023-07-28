@@ -2,6 +2,10 @@
 name = "axum-jwt-auth"
 version = "0.1.0"
 edition = "2021"
+authors = ["Cole MacKenzie"]
+description = "A simple JWT authentication middleware for Axum"
+license = "MIT"
+repository = "https://github.com/cmackenzie1/axum-jwt-auth"
 
 [dependencies]
 axum = { version = "0.6", features = ["headers", "macros"] }
