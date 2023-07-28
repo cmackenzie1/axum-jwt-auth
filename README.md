@@ -16,7 +16,7 @@ use axum::{
 
 use chrono::{Duration, Utc};
 use jsonwebtoken::{encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
-use jwtrs::{Claims, Decoder, JwtDecoderState, LocalDecoder};
+use axum_jwt_auth::{Claims, Decoder, JwtDecoderState, LocalDecoder};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, FromRef)]
@@ -63,7 +63,7 @@ async fn main() {
     let validation = Validation::new(Algorithm::RS256);
     let decoder: Decoder = LocalDecoder::new(keys, validation).into();
     let state = AppState {
-        decoder: jwtrs::JwtDecoderState { decoder },
+        decoder: JwtDecoderState { decoder },
     };
 
     let app = Router::new()
