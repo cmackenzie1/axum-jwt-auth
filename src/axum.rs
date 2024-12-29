@@ -1,10 +1,11 @@
 use axum::extract::FromRef;
-use axum::headers::authorization::Bearer;
-use axum::headers::Authorization;
 use axum::http::StatusCode;
 use axum::response::Response;
+use axum::RequestPartsExt;
 use axum::{async_trait, http::request::Parts, response::IntoResponse};
-use axum::{RequestPartsExt, TypedHeader};
+use axum_extra::headers::authorization::Bearer;
+use axum_extra::headers::Authorization;
+use axum_extra::TypedHeader;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
