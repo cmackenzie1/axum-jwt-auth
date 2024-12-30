@@ -10,8 +10,8 @@ repository = "https://github.com/cmackenzie1/axum-jwt-auth"
 [dependencies]
 axum = { version = "0.7", features = ["macros"] }
 axum-extra = { version = "0.9.6", features = ["typed-header"] }
-jsonwebtoken = { version = "8" }
-reqwest = { version = "0.11", default-features=false, features = ["json", "rustls-tls"] }
+jsonwebtoken = { version = "9" }
+reqwest = { version = "0.12", default-features=false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", default-features = false, features = [
     "time"
