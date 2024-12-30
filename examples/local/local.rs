@@ -62,9 +62,8 @@ async fn main() {
         .route("/login", post(login))
         .with_state(state);
 
-    // run it with hyper on localhost:3000
-    hyper::Server::bind(&"0.0.0.0:3000".parse().unwrap())
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    // run it on localhost:3000
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+
+    axum::serve(listener, app).await.unwrap();
 }
