@@ -50,7 +50,8 @@ async fn login() -> Response {
 #[tokio::main]
 async fn main() {
     let keys = vec![DecodingKey::from_rsa_pem(include_bytes!("jwt.key.pub")).unwrap()];
-    let validation = Validation::new(Algorithm::RS256);
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.set_audience(&["https://example.com"]);
     let decoder: Decoder = LocalDecoder::new(keys, validation).into();
     let state = AppState {
         decoder: JwtDecoderState { decoder },

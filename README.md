@@ -61,8 +61,10 @@ async fn login() -> Response {
 
 #[tokio::main]
 async fn main() {
-    let keys = vec![DecodingKey::from_rsa_pem(include_bytes!("../jwt.key.pub")).unwrap()];
-    let validation = Validation::new(Algorithm::RS256);
+    let keys = vec![DecodingKey::from_rsa_pem(include_bytes!("jwt.key.pub")).unwrap()];
+    let mut validation = Validation::new(Algorithm::RS256);
+    // Set the audience to the expected value. Not setting this will cause the token to be invalid.
+    validation.set_audience(&["https://example.com"]);
     let decoder: Decoder = LocalDecoder::new(keys, validation).into();
     let state = AppState {
         decoder: JwtDecoderState { decoder },
@@ -74,10 +76,8 @@ async fn main() {
         .route("/login", post(login))
         .with_state(state);
 
-    // run it with hyper on localhost:3000
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    // run it on localhost:3000
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 ```
