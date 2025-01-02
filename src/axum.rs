@@ -19,6 +19,7 @@ pub enum AuthError {
     MissingToken,
     ExpiredToken,
     InvalidSignature,
+    InvalidAudience,
     InternalError,
 }
 
@@ -29,6 +30,7 @@ impl IntoResponse for AuthError {
             AuthError::MissingToken => (StatusCode::UNAUTHORIZED, "Missing token"),
             AuthError::ExpiredToken => (StatusCode::UNAUTHORIZED, "Expired token"),
             AuthError::InvalidSignature => (StatusCode::UNAUTHORIZED, "Invalid signature"),
+            AuthError::InvalidAudience => (StatusCode::UNAUTHORIZED, "Invalid audience"),
             AuthError::InternalError => (StatusCode::INTERNAL_SERVER_ERROR, "Internal error"),
         };
 
@@ -64,6 +66,9 @@ where
                 jsonwebtoken::errors::ErrorKind::ExpiredSignature => Self::Rejection::ExpiredToken,
                 jsonwebtoken::errors::ErrorKind::InvalidSignature => {
                     Self::Rejection::InvalidSignature
+                }
+                jsonwebtoken::errors::ErrorKind::InvalidAudience => {
+                    Self::Rejection::InvalidAudience
                 }
                 _ => Self::Rejection::InvalidToken,
             },
