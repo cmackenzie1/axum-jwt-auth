@@ -1,5 +1,6 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
+use dashmap::DashMap;
 use jsonwebtoken::{jwk::JwkSet, DecodingKey, TokenData, Validation};
 use serde::de::DeserializeOwned;
 
@@ -11,7 +12,7 @@ use crate::{Decoder, Error, JwtDecoder};
 pub struct RemoteJwksDecoder {
     jwks_url: String,
     cache_duration: std::time::Duration,
-    keys_cache: RwLock<Vec<(Option<String>, DecodingKey)>>,
+    keys_cache: DashMap<String, DecodingKey>,
     validation: Validation,
     client: reqwest::Client,
     retry_count: usize,
@@ -29,7 +30,7 @@ impl RemoteJwksDecoder {
         Self {
             jwks_url,
             cache_duration: std::time::Duration::from_secs(60 * 60),
-            keys_cache: RwLock::new(Vec::new()),
+            keys_cache: DashMap::new(),
             validation: Validation::default(),
             client: reqwest::Client::new(),
             retry_count: 3,
@@ -66,17 +67,12 @@ impl RemoteJwksDecoder {
             .json::<JwkSet>()
             .await?;
 
-        let mut jwks_cache = self.keys_cache.write().unwrap();
-        *jwks_cache = jwks
-            .keys
-            .iter()
-            .flat_map(|jwk| -> Result<(Option<String>, DecodingKey), Error> {
-                let key_id = jwk.common.key_id.to_owned();
-                let key = DecodingKey::from_jwk(jwk).map_err(Error::Jwt)?;
-
-                Ok((key_id, key))
-            })
-            .collect();
+        self.keys_cache.clear();
+        for jwk in jwks.keys.iter() {
+            let key_id = jwk.common.key_id.to_owned();
+            let key = DecodingKey::from_jwk(jwk).map_err(Error::Jwt)?;
+            self.keys_cache.insert(key_id.unwrap_or_default(), key);
+        }
 
         Ok(())
     }
@@ -112,19 +108,16 @@ where
         let header = jsonwebtoken::decode_header(token)?;
         let target_kid = header.kid;
 
-        let jwks_cache = self.keys_cache.read().unwrap();
-
         // Try to find the key in the cache by kid
-        let jwk = jwks_cache.iter().find(|(kid, _)| kid == &target_kid);
-        if let Some((_, key)) = jwk {
-            return Ok(jsonwebtoken::decode::<T>(token, key, &self.validation)?);
+        if let Some(key) = self.keys_cache.get(&target_kid.unwrap_or_default()) {
+            return Ok(jsonwebtoken::decode::<T>(token, key.value(), &self.validation)?);
         }
 
         // Otherwise, try all the keys in the cache, returning the first one that works
         // If none of them work, return the error from the last one
         let mut err: Option<Error> = None;
-        for (_, key) in jwks_cache.iter() {
-            match jsonwebtoken::decode::<T>(token, key, &self.validation) {
+        for key in self.keys_cache.iter() {
+            match jsonwebtoken::decode::<T>(token, key.value(), &self.validation) {
                 Ok(token_data) => return Ok(token_data),
                 Err(e) => err = Some(e.into()),
             }
@@ -184,7 +177,7 @@ impl RemoteJwksDecoderBuilder {
         RemoteJwksDecoder {
             jwks_url: self.jwks_url,
             cache_duration: self.cache_duration,
-            keys_cache: RwLock::new(Vec::new()),
+            keys_cache: DashMap::new(),
             validation: self.validation,
             client: self.client,
             retry_count: self.retry_count,
