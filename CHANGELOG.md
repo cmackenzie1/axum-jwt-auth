@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2025-01-25
+
+### 💼 Other
+
+- Add dependabot
+- Update dependabot.yml
+- Remove axum::async_trait
+
+### ⚙️ Miscellaneous Tasks
+
+- Add git cliff for changelog and releases
+
 ## [0.2.0] - 2025-01-02
 
 ### 🐛 Bug Fixes
