@@ -2,7 +2,7 @@ use axum::extract::FromRef;
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum::RequestPartsExt;
-use axum::{async_trait, http::request::Parts, response::IntoResponse};
+use axum::{http::request::Parts, response::IntoResponse};
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
 use axum_extra::TypedHeader;
@@ -43,7 +43,6 @@ pub struct JwtDecoderState {
     pub decoder: Decoder,
 }
 
-#[async_trait]
 impl<S, T> axum::extract::FromRequestParts<S> for Claims<T>
 where
     JwtDecoderState: FromRef<S>,
