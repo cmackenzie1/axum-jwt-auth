@@ -1,10 +1,10 @@
 # axum-jwt-auth
 
 [![Rust](https://github.com/cmackenzie1/axum-jwt-auth/actions/workflows/rust.yml/badge.svg)](https://github.com/cmackenzie1/axum-jwt-auth/actions/workflows/rust.yml)
-![Crates.io Version](https://img.shields.io/crates/v/axum-jwt-auth)
-![docs.rs](https://img.shields.io/docsrs/axum-jwt-auth)
+[![Crates.io Version](https://img.shields.io/crates/v/axum-jwt-auth)](https://crates.io/crates/axum-jwt-auth)
+[![docs.rs](https://img.shields.io/docsrs/axum-jwt-auth)](https://docs.rs/axum-jwt-auth)
 
-A simple middleware for extracting JWT tokens from requests and making them available to your handlers.
+A Rust library providing JWT authentication middleware for Axum web applications. It supports both local and remote JWKS validation, handles token extraction and validation, and provides strongly-typed claims access in your request handlers. Built on top of jsonwebtoken, it offers a simple yet flexible API for securing your Axum routes with JWT authentication.
 
 See [examples](./examples/) for how to use.
 
