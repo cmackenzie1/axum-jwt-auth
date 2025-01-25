@@ -11,6 +11,32 @@ use serde::Deserialize;
 
 use crate::{Decoder, JwtDecoder};
 
+/// A generic struct for holding the claims of a JWT token.
+///
+/// # Example
+/// ```rust
+/// use axum::{Router, routing::get};
+/// use axum_jwt_auth::{Claims, Decoder, JwtDecoderState, LocalDecoder};
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Serialize, Deserialize)]
+/// struct MyClaims {
+///     sub: String,
+///     exp: u64,
+/// }
+///
+/// // Claims extractor will return a 401 if the token is invalid
+/// async fn protected(Claims(claims): Claims<MyClaims>) {
+///     println!("User {} accessed protected route", claims.sub);
+/// }
+///
+/// let decoder: Decoder = LocalDecoder::default().into();
+/// let state = JwtDecoderState { decoder };
+///
+/// let app = Router::new()
+///     .route("/protected", get(protected))
+///     .with_state(state);
+/// ```
 #[derive(Debug, Deserialize)]
 pub struct Claims<T>(pub T);
 
