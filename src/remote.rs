@@ -92,9 +92,10 @@ impl RemoteJwksDecoder {
                 Ok(_) => {}
                 Err(err) => {
                     // log the error and continue with stale keys
-                    eprintln!(
+                    tracing::error!(
                         "Failed to refresh JWKS after {} attempts: {:?}",
-                        self.retry_count, err
+                        self.retry_count,
+                        err
                     );
                 }
             }
