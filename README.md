@@ -1,6 +1,8 @@
 # axum-jwt-auth
 
 [![Rust](https://github.com/cmackenzie1/axum-jwt-auth/actions/workflows/rust.yml/badge.svg)](https://github.com/cmackenzie1/axum-jwt-auth/actions/workflows/rust.yml)
+![Crates.io Version](https://img.shields.io/crates/v/axum-jwt-auth)
+![docs.rs](https://img.shields.io/docsrs/axum-jwt-auth)
 
 A simple middleware for extracting JWT tokens from requests and making them available to your handlers.
 
