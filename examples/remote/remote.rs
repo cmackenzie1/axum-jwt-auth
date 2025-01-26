@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{extract::FromRef, routing::get, Json, Router};
-use axum_jwt_auth::{Claims, JwtDecoderState, RemoteJwksDecoderBuilder};
+use axum_jwt_auth::{Claims, JwtDecoderState, RemoteJwksDecoder};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -73,13 +73,12 @@ async fn main() {
     validation.set_issuer(&["your-issuer"]);
 
     // Create a decoder pointing to the JWKS endpoint
-    let decoder = Arc::new(
-        RemoteJwksDecoderBuilder::default()
-            .jwks_url("http://127.0.0.1:3000/.well-known/jwks.json".to_string())
-            .validation(validation)
-            .build()
-            .expect("Failed to build JWKS decoder"),
-    );
+    let decoder = RemoteJwksDecoder::builder()
+        .jwks_url("http://127.0.0.1:3000/.well-known/jwks.json".to_string())
+        .validation(validation)
+        .build()
+        .expect("Failed to build JWKS decoder");
+    let decoder = Arc::new(decoder);
 
     // Start background task to periodically refresh JWKS
     let decoder_clone = decoder.clone();

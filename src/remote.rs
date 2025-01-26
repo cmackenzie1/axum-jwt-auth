@@ -36,6 +36,15 @@ impl Default for RemoteJwksDecoderConfig {
     }
 }
 
+impl RemoteJwksDecoderConfig {
+    /// Creates a new [`RemoteJwksDecoderConfigBuilder`].
+    ///
+    /// This is a convenience method to create a builder for the config.
+    pub fn builder() -> RemoteJwksDecoderConfigBuilder {
+        RemoteJwksDecoderConfigBuilder::default()
+    }
+}
+
 /// Remote JWKS decoder.
 /// It fetches the JWKS from the given URL and caches it for the given duration.
 /// It uses the cached JWKS to decode the JWT tokens.
@@ -66,6 +75,13 @@ impl RemoteJwksDecoder {
             .jwks_url(jwks_url)
             .build()
             .unwrap()
+    }
+
+    /// Creates a new [`RemoteJwksDecoderBuilder`].
+    ///
+    /// This is a convenience method to create a builder for the decoder.
+    pub fn builder() -> RemoteJwksDecoderBuilder {
+        RemoteJwksDecoderBuilder::default()
     }
 
     /// Refreshes the JWKS cache.
