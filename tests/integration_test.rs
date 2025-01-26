@@ -180,9 +180,8 @@ async fn remote_decoder() {
         exp: (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp() as u64,
     };
 
-    let mut header = Header::default();
+    let mut header = Header::new(Algorithm::RS256);
     header.kid = Some("1dea0016-46b8-4289-ad7b-226cfaf5305e".to_string());
-    header.alg = Algorithm::RS256;
 
     let token = jsonwebtoken::encode(
         &header,

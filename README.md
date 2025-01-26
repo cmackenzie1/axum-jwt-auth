@@ -22,6 +22,17 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 Please make sure to update tests as appropriate.
 
+### Useful commands
+
+```bash
+cargo fmt
+cargo clippy --all-features --all-targets
+# if you have nextest installed, you can run tests with:
+cargo nextest run --profile ci
+# otherwise regular cargo test will work
+cargo test
+```
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

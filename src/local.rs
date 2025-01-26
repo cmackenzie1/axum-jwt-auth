@@ -45,12 +45,6 @@ where
     T: for<'de> DeserializeOwned,
 {
     async fn decode(&self, token: &str) -> Result<TokenData<T>, Error> {
-        let header = jsonwebtoken::decode_header(token)?;
-
-        if !self.validation.algorithms.contains(&header.alg) {
-            return Err(Error::Configuration("Algorithm not supported".into()));
-        }
-
         // Try to decode the token with each key in the cache
         // If none of them work, return the error from the last one
         let mut last_error: Option<Error> = None;
