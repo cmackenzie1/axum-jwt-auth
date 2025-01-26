@@ -1,21 +1,14 @@
-use std::sync::Arc;
-
 use jsonwebtoken::{DecodingKey, TokenData, Validation};
 use serde::de::DeserializeOwned;
 
-use crate::{Decoder, Error, JwtDecoder};
+use crate::{Error, JwtDecoder};
 
 /// Local decoder
 /// It uses the given JWKS to decode the JWT tokens.
+#[derive(Clone)]
 pub struct LocalDecoder {
     keys: Vec<DecodingKey>,
     validation: Validation,
-}
-
-impl From<LocalDecoder> for Decoder {
-    fn from(decoder: LocalDecoder) -> Self {
-        Self::Local(Arc::new(decoder))
-    }
 }
 
 impl LocalDecoder {

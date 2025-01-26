@@ -9,44 +9,15 @@ use axum_extra::TypedHeader;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
-use crate::{Decoder, JwtDecoder};
+use crate::Decoder;
 
 /// A generic struct for holding the claims of a JWT token.
 #[derive(Debug, Deserialize)]
 pub struct Claims<T>(pub T);
 
-pub enum AuthError {
-    InvalidToken,
-    MissingToken,
-    ExpiredToken,
-    InvalidSignature,
-    InvalidAudience,
-    InternalError,
-}
-
-impl IntoResponse for AuthError {
-    fn into_response(self) -> Response {
-        let (status, msg) = match self {
-            AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token"),
-            AuthError::MissingToken => (StatusCode::UNAUTHORIZED, "Missing token"),
-            AuthError::ExpiredToken => (StatusCode::UNAUTHORIZED, "Expired token"),
-            AuthError::InvalidSignature => (StatusCode::UNAUTHORIZED, "Invalid signature"),
-            AuthError::InvalidAudience => (StatusCode::UNAUTHORIZED, "Invalid audience"),
-            AuthError::InternalError => (StatusCode::INTERNAL_SERVER_ERROR, "Internal error"),
-        };
-
-        (status, msg).into_response()
-    }
-}
-
-#[derive(Clone, FromRef)]
-pub struct JwtDecoderState {
-    pub decoder: Decoder,
-}
-
 impl<S, T> axum::extract::FromRequestParts<S> for Claims<T>
 where
-    JwtDecoderState: FromRef<S>,
+    JwtDecoderState<T>: FromRef<S>,
     S: Send + Sync,
     T: DeserializeOwned,
 {
@@ -75,6 +46,48 @@ where
             _ => Self::Rejection::InternalError,
         })?;
 
-        Ok(token_data.claims)
+        Ok(Claims(token_data.claims))
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AuthError {
+    #[error("Invalid token")]
+    InvalidToken,
+    #[error("Missing token")]
+    MissingToken,
+    #[error("Expired token")]
+    ExpiredToken,
+    #[error("Invalid signature")]
+    InvalidSignature,
+    #[error("Invalid audience")]
+    InvalidAudience,
+    #[error("Internal error")]
+    InternalError,
+}
+
+impl IntoResponse for AuthError {
+    fn into_response(self) -> Response {
+        let (status, msg) = match self {
+            AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token"),
+            AuthError::MissingToken => (StatusCode::UNAUTHORIZED, "Missing token"),
+            AuthError::ExpiredToken => (StatusCode::UNAUTHORIZED, "Expired token"),
+            AuthError::InvalidSignature => (StatusCode::UNAUTHORIZED, "Invalid signature"),
+            AuthError::InvalidAudience => (StatusCode::UNAUTHORIZED, "Invalid audience"),
+            AuthError::InternalError => (StatusCode::INTERNAL_SERVER_ERROR, "Internal error"),
+        };
+
+        (status, msg).into_response()
+    }
+}
+
+#[derive(Clone)]
+pub struct JwtDecoderState<T> {
+    pub decoder: Decoder<T>,
+}
+
+impl<T> FromRef<JwtDecoderState<T>> for Decoder<T> {
+    fn from_ref(state: &JwtDecoderState<T>) -> Self {
+        state.decoder.clone()
     }
 }

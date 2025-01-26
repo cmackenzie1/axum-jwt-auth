@@ -25,7 +25,10 @@ use thiserror::Error;
 
 pub use crate::axum::{AuthError, Claims, JwtDecoderState};
 pub use crate::local::LocalDecoder;
-pub use crate::remote::{RemoteJwksDecoder, RemoteJwksDecoderBuilder};
+pub use crate::remote::{
+    RemoteJwksDecoder, RemoteJwksDecoderBuilder, RemoteJwksDecoderConfig,
+    RemoteJwksDecoderConfigBuilder,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -49,17 +52,5 @@ where
     fn decode(&self, token: &str) -> Result<TokenData<T>, Error>;
 }
 
-#[derive(Clone)]
-pub enum Decoder {
-    Local(Arc<LocalDecoder>),
-    Remote(Arc<RemoteJwksDecoder>),
-}
-
-impl<T: DeserializeOwned> JwtDecoder<T> for Decoder {
-    fn decode(&self, token: &str) -> Result<TokenData<T>, Error> {
-        match self {
-            Self::Local(decoder) => decoder.decode(token),
-            Self::Remote(decoder) => decoder.decode(token),
-        }
-    }
-}
+/// A type alias for a decoder that can be used as a state in an Axum application.
+pub type Decoder<T> = Arc<dyn JwtDecoder<T> + Send + Sync>;

@@ -1,45 +1,55 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
+use derive_builder::Builder;
 use jsonwebtoken::{jwk::JwkSet, DecodingKey, TokenData, Validation};
 use serde::de::DeserializeOwned;
 
-use crate::{Decoder, Error, JwtDecoder};
+use crate::{Error, JwtDecoder};
+
+const DEFAULT_CACHE_DURATION: std::time::Duration = std::time::Duration::from_secs(60 * 60); // 1 hour
+const DEFAULT_RETRY_COUNT: usize = 3; // 3 attempts
+const DEFAULT_BACKOFF: std::time::Duration = std::time::Duration::from_secs(1); // 1 second
+
+#[derive(Debug, Clone, Builder)]
+pub struct RemoteJwksDecoderConfig {
+    pub cache_duration: std::time::Duration,
+    pub retry_count: usize,
+    pub backoff: std::time::Duration,
+}
+
+impl Default for RemoteJwksDecoderConfig {
+    fn default() -> Self {
+        Self {
+            cache_duration: DEFAULT_CACHE_DURATION,
+            retry_count: DEFAULT_RETRY_COUNT,
+            backoff: DEFAULT_BACKOFF,
+        }
+    }
+}
 
 /// Remote JWKS decoder.
 /// It fetches the JWKS from the given URL and caches it for the given duration.
 /// It uses the cached JWKS to decode the JWT tokens.
+#[derive(Clone, Builder)]
 pub struct RemoteJwksDecoder {
     jwks_url: String,
-    cache_duration: std::time::Duration,
-    keys_cache: DashMap<String, DecodingKey>,
+    config: RemoteJwksDecoderConfig,
+    keys_cache: Arc<DashMap<String, DecodingKey>>,
     validation: Validation,
     client: reqwest::Client,
-    retry_count: usize,
-    backoff: std::time::Duration,
-}
-
-impl From<RemoteJwksDecoder> for Decoder {
-    fn from(decoder: RemoteJwksDecoder) -> Self {
-        Self::Remote(Arc::new(decoder))
-    }
 }
 
 impl RemoteJwksDecoder {
     pub fn new(jwks_url: String) -> Self {
-        Self {
-            jwks_url,
-            cache_duration: std::time::Duration::from_secs(60 * 60),
-            keys_cache: DashMap::new(),
-            validation: Validation::default(),
-            client: reqwest::Client::new(),
-            retry_count: 3,
-            backoff: std::time::Duration::from_secs(1),
-        }
+        RemoteJwksDecoderBuilder::default()
+            .jwks_url(jwks_url)
+            .build()
+            .unwrap()
     }
 
     async fn refresh_keys(&self) -> Result<(), Error> {
-        let max_attempts = self.retry_count;
+        let max_attempts = self.config.retry_count;
         let mut attempt = 0;
         let mut err = None;
 
@@ -49,7 +59,7 @@ impl RemoteJwksDecoder {
                 Err(e) => {
                     err = Some(e);
                     attempt += 1;
-                    tokio::time::sleep(self.backoff).await;
+                    tokio::time::sleep(self.config.backoff).await;
                 }
             }
         }
@@ -84,18 +94,19 @@ impl RemoteJwksDecoder {
     /// succeeds or the universe ends, whichever comes first.
     pub async fn refresh_keys_periodically(&self) {
         loop {
+            tracing::info!("Refreshing JWKS");
             match self.refresh_keys().await {
                 Ok(_) => {}
                 Err(err) => {
                     // log the error and continue with stale keys
                     tracing::error!(
                         "Failed to refresh JWKS after {} attempts: {:?}",
-                        self.retry_count,
+                        self.config.retry_count,
                         err
                     );
                 }
             }
-            tokio::time::sleep(self.cache_duration).await;
+            tokio::time::sleep(self.config.cache_duration).await;
         }
     }
 }
@@ -107,81 +118,28 @@ where
     fn decode(&self, token: &str) -> Result<TokenData<T>, Error> {
         let header = jsonwebtoken::decode_header(token)?;
         let target_kid = header.kid;
-
-        // Try to find the key in the cache by kid
-        if let Some(key) = self.keys_cache.get(&target_kid.unwrap_or_default()) {
-            return Ok(jsonwebtoken::decode::<T>(token, key.value(), &self.validation)?);
+        if let Some(kid) = target_kid {
+            // Try to find the key in the cache by kid
+            if let Some(key) = self.keys_cache.get(&kid) {
+                return Ok(jsonwebtoken::decode::<T>(
+                    token,
+                    key.value(),
+                    &self.validation,
+                )?);
+            }
+            return Err(Error::KeyNotFound(Some(kid)));
         }
 
         // Otherwise, try all the keys in the cache, returning the first one that works
         // If none of them work, return the error from the last one
-        let mut err: Option<Error> = None;
         for key in self.keys_cache.iter() {
             match jsonwebtoken::decode::<T>(token, key.value(), &self.validation) {
                 Ok(token_data) => return Ok(token_data),
-                Err(e) => err = Some(e.into()),
+                Err(e) => {
+                    tracing::debug!("Failed to decode token with key {}: {:?}", key.key(), e);
+                }
             }
         }
-
-        Err(err.unwrap())
-    }
-}
-
-pub struct RemoteJwksDecoderBuilder {
-    jwks_url: String,
-    cache_duration: std::time::Duration,
-    validation: Validation,
-    client: reqwest::Client,
-    retry_count: usize,
-    backoff: std::time::Duration,
-}
-
-impl RemoteJwksDecoderBuilder {
-    pub fn new(jwks_url: String) -> Self {
-        Self {
-            jwks_url,
-            cache_duration: std::time::Duration::from_secs(60 * 60),
-            validation: Validation::default(),
-            client: reqwest::Client::new(),
-            retry_count: 3,
-            backoff: std::time::Duration::from_secs(1),
-        }
-    }
-
-    pub fn with_jwks_cache_duration(mut self, jwks_cache_duration: std::time::Duration) -> Self {
-        self.cache_duration = jwks_cache_duration;
-        self
-    }
-
-    pub fn with_client(mut self, client: reqwest::Client) -> Self {
-        self.client = client;
-        self
-    }
-
-    pub fn with_validation(mut self, validation: Validation) -> Self {
-        self.validation = validation;
-        self
-    }
-
-    pub fn with_retry_count(mut self, retry_count: usize) -> Self {
-        self.retry_count = retry_count;
-        self
-    }
-
-    pub fn with_backoff(mut self, backoff: std::time::Duration) -> Self {
-        self.backoff = backoff;
-        self
-    }
-
-    pub fn build(self) -> RemoteJwksDecoder {
-        RemoteJwksDecoder {
-            jwks_url: self.jwks_url,
-            cache_duration: self.cache_duration,
-            keys_cache: DashMap::new(),
-            validation: self.validation,
-            client: self.client,
-            retry_count: self.retry_count,
-            backoff: self.backoff,
-        }
+        Err(Error::KeyNotFound(target_kid))
     }
 }
