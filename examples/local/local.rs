@@ -56,7 +56,11 @@ async fn main() {
     let keys = vec![DecodingKey::from_rsa_pem(include_bytes!("jwt.key.pub")).unwrap()];
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_audience(&["https://example.com"]);
-    let decoder = LocalDecoder::new(keys, validation);
+    let decoder = LocalDecoder::builder()
+        .keys(keys)
+        .validation(validation)
+        .build()
+        .unwrap();
     let state = AppState {
         decoder: JwtDecoderState {
             decoder: Arc::new(decoder),

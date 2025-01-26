@@ -28,16 +28,31 @@ pub struct CustomClaims {
     exp: u64,
 }
 
+fn init_tracing() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .try_init();
+}
+
 #[tokio::test]
 async fn local_decoder() {
+    // Initialize tracing for logging, with a guard to prevent duplicate initialization
+    init_tracing();
+
     // Load the keys
     let encoding_key = EncodingKey::from_rsa_pem(include_bytes!("jwt.key")).unwrap();
     let decoding_key = DecodingKey::from_rsa_pem(include_bytes!("jwt.key.pub")).unwrap();
 
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_audience(&["https://example.com"]);
-    let decoder: Decoder<CustomClaims> =
-        Arc::new(LocalDecoder::new(vec![decoding_key.to_owned()], validation));
+
+    let decoder: Decoder<CustomClaims> = Arc::new(
+        LocalDecoder::builder()
+            .keys(vec![decoding_key.to_owned()])
+            .validation(validation)
+            .build()
+            .unwrap(),
+    );
     let state = AppState {
         decoder: JwtDecoderState { decoder },
     };
@@ -54,11 +69,10 @@ async fn local_decoder() {
                 let mut header = Header::new(Algorithm::RS256);
                 header.kid = Some("test".to_string());
 
-                let exp = Utc::now() + Duration::hours(1);
                 let claims = CustomClaims {
-                    iat: 1234567890,
+                    iat: Utc::now().timestamp() as u64,
                     aud: "https://example.com".to_string(),
-                    exp: exp.timestamp() as u64,
+                    exp: (Utc::now() + Duration::hours(1)).timestamp() as u64,
                 };
 
                 let token = encode::<CustomClaims>(&header, &claims, &encoding_key).unwrap();
@@ -105,14 +119,13 @@ async fn local_decoder() {
     let body = res.text().await.unwrap();
     let claims: CustomClaims = serde_json::from_str(&body).unwrap();
     assert_eq!(claims.aud, "https://example.com");
-    assert_eq!(claims.iat, 1234567890);
-    assert!(claims.exp > Utc::now().timestamp() as u64);
+    assert!(claims.iat <= Utc::now().timestamp() as u64);
+    assert!(claims.exp >= Utc::now().timestamp() as u64);
 }
 
 #[tokio::test]
 async fn remote_decoder() {
-    // Initialize tracing for logging, with a guard to prevent duplicate initialization
-    let _ = tracing_subscriber::fmt::try_init();
+    init_tracing();
 
     // Create a test JWKS handler that returns a static JWKS
     let app = Router::new().route(
@@ -212,8 +225,7 @@ async fn remote_decoder() {
 
 #[tokio::test]
 async fn test_remote_decoder_initialization() {
-    // Initialize tracing for logging, with a guard to prevent duplicate initialization
-    let _ = tracing_subscriber::fmt::try_init();
+    init_tracing();
 
     // Create a delayed JWKS handler that simulates slow responses
     let app = Router::new().route(
