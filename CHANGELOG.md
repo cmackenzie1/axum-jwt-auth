@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2025-01-26
+
+### 🚀 Features
+
+- *(errors)* Improve error handling with thiserror
+- *(errors)* Replace eprintln with tracing logs
+- Use dashmap for better concurrency
+- Add remote JWKS decoder with improved configuration and error handling
+
+### 📚 Documentation
+
+- Add badges to README.md
+- Simplify documentation and remove redundant examples
+- Update README.md, fix badge links
+- Update README.md
+
+### 🧪 Testing
+
+- Add integration test for remote jwks
+
 ## [0.3.0] - 2025-01-25
 
 ### 💼 Other
