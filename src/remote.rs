@@ -70,11 +70,11 @@ pub struct RemoteJwksDecoder {
 
 impl RemoteJwksDecoder {
     /// Creates a new [`RemoteJwksDecoder`] with the given JWKS URL.
-    pub fn new(jwks_url: String) -> Self {
+    pub fn new(jwks_url: String) -> Result<Self, Error> {
         RemoteJwksDecoderBuilder::default()
             .jwks_url(jwks_url)
             .build()
-            .unwrap()
+            .map_err(|e| Error::Configuration(e.to_string()))
     }
 
     /// Creates a new [`RemoteJwksDecoderBuilder`].
@@ -104,8 +104,11 @@ impl RemoteJwksDecoder {
             }
         }
 
-        // Last attempt failed, return the error
-        Err(err.unwrap())
+        Err(Error::JwksRefresh {
+            message: "Failed to refresh JWKS after multiple attempts".to_string(),
+            retry_count: max_attempts,
+            source: err.map(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+        })
     }
 
     /// Refreshes the JWKS cache once.
