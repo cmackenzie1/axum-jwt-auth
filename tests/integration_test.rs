@@ -12,7 +12,6 @@ use axum_jwt_auth::{
     RemoteJwksDecoderConfigBuilder,
 };
 use chrono::{Duration, Utc};
-use dashmap::DashMap;
 use jsonwebtoken::{encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -152,8 +151,6 @@ async fn remote_decoder() {
                 .unwrap(),
         )
         .validation(validation)
-        .client(reqwest::Client::new())
-        .keys_cache(Arc::new(DashMap::new()))
         .build()
         .expect("Failed to build decoder");
 

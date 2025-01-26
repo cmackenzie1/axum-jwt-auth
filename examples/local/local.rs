@@ -27,6 +27,8 @@ async fn index() -> Response {
     "Hello, World!".into_response()
 }
 
+// If using `axum::debug_handler`, You will have to include the state parameter in the function signature. Otherwise, you can remove it.
+// https://github.com/tokio-rs/axum/discussions/2240#discussioncomment-7100590
 #[axum::debug_handler]
 async fn user_info(Claims(claims): Claims<MyClaims>, State(_state): State<AppState>) -> Response {
     Json(claims).into_response()

@@ -1,14 +1,12 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
-use axum::{routing::get, Json, Router};
+use axum::{extract::FromRef, routing::get, Json, Router};
 use axum_jwt_auth::{
-    JwtDecoder, RemoteJwksDecoder, RemoteJwksDecoderBuilder, RemoteJwksDecoderConfigBuilder,
+    Claims, JwtDecoderState, RemoteJwksDecoderBuilder,
 };
-use dashmap::DashMap;
 use jsonwebtoken::{Algorithm, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct CustomClaims {
@@ -41,73 +39,110 @@ async fn jwks_handler() -> Json<Value> {
     }))
 }
 
+/// This is a protected route that requires a valid JWT token to be passed in the Authorization header
+/// It uses the `Claims` extractor to get the claims from the token
+async fn protected_route(Claims(claims): Claims<CustomClaims>) -> Json<CustomClaims> {
+    Json(claims)
+}
+
+/// This is a state struct that holds the JWT decoder
+#[derive(Clone, FromRef)]
+struct AppState {
+    decoder: JwtDecoderState<CustomClaims>,
+}
+
 #[tokio::main]
 async fn main() {
     // Initialize tracing for logging
     tracing_subscriber::fmt::init();
 
-    // Create the Axum router with the JWKS endpoint
-    let app = Router::new().route("/.well-known/jwks.json", get(jwks_handler));
-
-    // Spawn the server task
+    // First, we need to mock a JWKS server for testing purposes
+    // In a real application, this would be a remote server like auth0, okta, etc.
+    let jwks_server = Router::new().route("/.well-known/jwks.json", get(jwks_handler));
     let server_handle = tokio::spawn(async move {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
             .await
-            .expect("Failed to bind server");
-        println!("JWKS server listening on http://127.0.0.1:3000");
-        axum::serve(listener, app)
+            .expect("Failed to bind JWKS mock server");
+        println!("Mock JWKS server listening on http://127.0.0.1:3000");
+        axum::serve(listener, jwks_server)
             .await
-            .expect("Failed to start server");
+            .expect("Failed to start JWKS mock server");
     });
 
-    // Create a remote JWKS decoder with custom configuration
-    let decoder = RemoteJwksDecoderBuilder::default()
-        .jwks_url("http://127.0.0.1:3000/.well-known/jwks.json".to_string())
-        .config(
-            RemoteJwksDecoderConfigBuilder::default()
-                .cache_duration(Duration::from_secs(1)) // Low value for testing, in a real application you should use a higher value
-                .retry_count(3)
-                .backoff(Duration::from_secs(1))
-                .build()
-                .unwrap(),
-        )
-        .validation(Validation::new(Algorithm::RS256))
-        .client(reqwest::Client::new())
-        .keys_cache(Arc::new(DashMap::new()))
-        .build()
-        .expect("Failed to build decoder");
+    // Set the validation parameters, as of jsonwebtoken version 9, you MUST set the algorithm and the audience
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.set_audience(&["your-audience"]);
+    validation.set_issuer(&["your-issuer"]);
 
-    // Spawn a task to periodically refresh the JWKS
+    // Create a decoder pointing to the JWKS endpoint
+    let decoder = Arc::new(
+        RemoteJwksDecoderBuilder::default()
+            .jwks_url("http://127.0.0.1:3000/.well-known/jwks.json".to_string())
+            .validation(validation)
+            .build()
+            .expect("Failed to build JWKS decoder"),
+    );
+
+    // Start background task to periodically refresh JWKS
     let decoder_clone = decoder.clone();
     tokio::spawn(async move {
         decoder_clone.refresh_keys_periodically().await;
     });
+    // Wait for the JWKS server to start
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-    // Create a token
-    let token = jsonwebtoken::encode(
-        &Header::new(Algorithm::RS256),
+    // Create an app server that has the decoder as a state
+    let app_server = Router::new()
+        .route("/protected", get(protected_route))
+        .with_state(AppState {
+            decoder: JwtDecoderState {
+                decoder: decoder.clone(),
+            },
+        });
+
+    // Start the app server
+    let app_server_handle = tokio::spawn(async move {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:3001")
+            .await
+            .expect("Failed to bind app server");
+        println!("App server listening on http://127.0.0.1:3001");
+        axum::serve(listener, app_server)
+            .await
+            .expect("Failed to start app server");
+    });
+
+    // Example: Validate a JWT token
+    // In a real application, this token would come from your users
+    let mut header = Header::new(Algorithm::RS256);
+    header.kid = Some("1dea0016-46b8-4289-ad7b-226cfaf5305e".to_string());
+
+    let test_token = jsonwebtoken::encode(
+        &header,
         &CustomClaims {
-            sub: "123".to_string(),
-            name: "John Doe".to_string(),
-            exp: (chrono::Utc::now().timestamp() + 60 * 60) as usize,
+            sub: "user123".to_string(),
+            name: "Test User".to_string(),
+            exp: (chrono::Utc::now().timestamp() + 3600) as usize, // 1 hour expiry
         },
         &EncodingKey::from_rsa_pem(include_bytes!("jwt.key")).unwrap(),
     )
-    .unwrap();
+    .expect("Failed to create test token");
 
-    // Decode the token
-    match <RemoteJwksDecoder as JwtDecoder<CustomClaims>>::decode(&decoder, &token) {
-        Ok(token_data) => {
-            println!("Token successfully decoded: {:?}", token_data.claims);
-        }
-        Err(err) => {
-            eprintln!("Failed to decode token: {:?}", err);
-        }
-    }
+    // Make a request to the protected route
+    let response = reqwest::Client::new()
+        .get("http://127.0.0.1:3001/protected")
+        .header("Authorization", format!("Bearer {}", test_token))
+        .send()
+        .await
+        .expect("Failed to make request");
+    println!(
+        "Response: {:?}",
+        response
+            .json::<CustomClaims>()
+            .await
+            .expect("Failed to read response")
+    );
 
-    // Keep the main task running for a while to see the periodic refresh in action
-    tokio::time::sleep(Duration::from_secs(60)).await;
-
-    // Clean shutdown
+    // Clean up our servers
     server_handle.abort();
+    app_server_handle.abort();
 }

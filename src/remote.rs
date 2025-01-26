@@ -13,8 +13,11 @@ const DEFAULT_BACKOFF: std::time::Duration = std::time::Duration::from_secs(1); 
 
 #[derive(Debug, Clone, Builder)]
 pub struct RemoteJwksDecoderConfig {
+    #[builder(default = "DEFAULT_CACHE_DURATION")]
     pub cache_duration: std::time::Duration,
+    #[builder(default = "DEFAULT_RETRY_COUNT")]
     pub retry_count: usize,
+    #[builder(default = "DEFAULT_BACKOFF")]
     pub backoff: std::time::Duration,
 }
 
@@ -34,9 +37,12 @@ impl Default for RemoteJwksDecoderConfig {
 #[derive(Clone, Builder)]
 pub struct RemoteJwksDecoder {
     jwks_url: String,
+    #[builder(default = "RemoteJwksDecoderConfig::default()")]
     config: RemoteJwksDecoderConfig,
+    #[builder(default = "Arc::new(DashMap::new())")]
     keys_cache: Arc<DashMap<String, DecodingKey>>,
     validation: Validation,
+    #[builder(default = "reqwest::Client::new()")]
     client: reqwest::Client,
 }
 
@@ -118,16 +124,15 @@ where
     fn decode(&self, token: &str) -> Result<TokenData<T>, Error> {
         let header = jsonwebtoken::decode_header(token)?;
         let target_kid = header.kid;
-        if let Some(kid) = target_kid {
+        if let Some(ref kid) = target_kid {
             // Try to find the key in the cache by kid
-            if let Some(key) = self.keys_cache.get(&kid) {
+            if let Some(key) = self.keys_cache.get(kid) {
                 return Ok(jsonwebtoken::decode::<T>(
                     token,
                     key.value(),
                     &self.validation,
                 )?);
             }
-            return Err(Error::KeyNotFound(Some(kid)));
         }
 
         // Otherwise, try all the keys in the cache, returning the first one that works
