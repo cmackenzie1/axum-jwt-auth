@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use jsonwebtoken::{DecodingKey, TokenData, Validation};
 use serde::de::DeserializeOwned;
 
@@ -33,11 +34,12 @@ impl From<DecodingKey> for LocalDecoder {
     }
 }
 
+#[async_trait]
 impl<T> JwtDecoder<T> for LocalDecoder
 where
     T: for<'de> DeserializeOwned,
 {
-    fn decode(&self, token: &str) -> Result<TokenData<T>, Error> {
+    async fn decode(&self, token: &str) -> Result<TokenData<T>, Error> {
         // Try to decode the token with each key in the cache
         // If none of them work, return the error from the last one
         let mut err: Option<Error> = None;

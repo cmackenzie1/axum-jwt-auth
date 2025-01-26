@@ -8,10 +8,12 @@ license = "MIT"
 repository = "https://github.com/cmackenzie1/axum-jwt-auth"
 
 [dependencies]
+async-trait = "0.1"
 axum = { version = "0.8", features = ["macros"] }
 axum-extra = { version = "0.10.0", features = ["typed-header"] }
 dashmap = "6.1.0"
 derive_builder = "0.20.2"
+futures = "0.3"
 jsonwebtoken = { version = "9" }
 reqwest = { version = "0.12", default-features = false, features = [
     "json",

@@ -19,6 +19,7 @@ mod remote;
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use jsonwebtoken::TokenData;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
@@ -45,11 +46,12 @@ pub enum Error {
 /// A generic trait for decoding JWT tokens.
 ///
 /// This trait is implemented for both `LocalDecoder` and `RemoteJwksDecoder`
+#[async_trait]
 pub trait JwtDecoder<T>
 where
     T: for<'de> DeserializeOwned,
 {
-    fn decode(&self, token: &str) -> Result<TokenData<T>, Error>;
+    async fn decode(&self, token: &str) -> Result<TokenData<T>, Error>;
 }
 
 /// A type alias for a decoder that can be used as a state in an Axum application.

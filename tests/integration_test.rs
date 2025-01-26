@@ -111,8 +111,8 @@ async fn local_decoder() {
 
 #[tokio::test]
 async fn remote_decoder() {
-    // Initialize tracing for logging
-    tracing_subscriber::fmt::init();
+    // Initialize tracing for logging, with a guard to prevent duplicate initialization
+    let _ = tracing_subscriber::fmt::try_init();
 
     // Create a test JWKS handler that returns a static JWKS
     let app = Router::new().route(
@@ -160,9 +160,6 @@ async fn remote_decoder() {
         decoder_clone.refresh_keys_periodically().await;
     });
 
-    // Wait for initial key fetch
-    tokio::time::sleep(Duration::seconds(1).to_std().unwrap()).await;
-
     // Test decoding with valid token
     let claims = CustomClaims {
         iat: 1234567890,
@@ -182,7 +179,10 @@ async fn remote_decoder() {
     )
     .expect("Failed to create token");
 
-    let result: TokenData<CustomClaims> = decoder.decode(&token).expect("Failed to decode token");
+    let result: TokenData<CustomClaims> = decoder
+        .decode(&token)
+        .await
+        .expect("Failed to decode token");
     assert_eq!(result.claims.iat, claims.iat);
     assert_eq!(result.claims.aud, claims.aud);
     assert!(result.claims.exp > Utc::now().timestamp() as u64);
@@ -202,8 +202,102 @@ async fn remote_decoder() {
     )
     .expect("Failed to create token");
 
-    let expired_result: Result<TokenData<CustomClaims>, _> = decoder.decode(&expired_token);
+    let expired_result: Result<TokenData<CustomClaims>, _> = decoder.decode(&expired_token).await;
     assert!(expired_result.is_err());
+
+    // Clean up
+    server_handle.abort();
+    refresh_handle.abort();
+}
+
+#[tokio::test]
+async fn test_remote_decoder_initialization() {
+    // Initialize tracing for logging, with a guard to prevent duplicate initialization
+    let _ = tracing_subscriber::fmt::try_init();
+
+    // Create a delayed JWKS handler that simulates slow responses
+    let app = Router::new().route(
+        "/.well-known/jwks.json",
+        get(|| async {
+            // Simulate slow initial response
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            Json(json!({
+                "keys": [{
+                    "kty": "RSA",
+                    "use": "sig",
+                    "alg": "RS256",
+                    "kid": "test-key",
+                    "n": "sPWeaqsN-2KZu9rlto59XASssMoaVjIxMYXtLyifky1sXS4EvYFnvr37X63B-lMwuZ3xACc7xsUPK-GXPe6XqZGJdj-Wgf7a3J6FieSNpnrDK4x6CMr0iAPgIhoEYp7BUyPKzPv21vMl6A5kJvlAAdxfPm3jhk5NDWHSfiFnWiC7UESARgyFl0TlJ-f9H3qaArkzp3Cb-m-wlHpleewOSr9maTPLdIS-ZzZ1ZC4lDIQnetJJ0kue-o1wAL4VmdBMY8IVxEutPAaZO-9G8eYJywZiDDkcrrqWymDvSUarcB_AOzEQjxN6nSSNuW6UbalfnDlGmR0kFK8fopraA4nwU4tG6fAuKTPpOmahC910IRAkedOp6IrRU-2LmcBQ0oyzukHjXd9o9_5MES2wTDFgZBalVRZCo55vdQt5CtQDQWVUbQ1y95dm_0EmmgZzWBgiguSKcO2QuqwYIiq5t9uikFleeVQDVnd-V6yZ5wWfnA6H0-dPw4VTEUkxaTN8jQImQtB9gvj8iknsGX08LGF5WjWh1ewJI0L74Ey5T_ytsXME6Xpn1qfXB2sr5tPol3KeV8pjuGrAymvaLJZz4ZqNY3f4wULfCsyVasUOdknMm8UmTgPR-vnDlF-1ItsmN-Jl-RJ1dFkXRDcelCIJS44sMSchnxv47OwnqvBHCPbiUI8",
+                    "e": "AQAB"
+                }]
+            }))
+        }),
+    );
+
+    // Spawn the JWKS server
+    let server_handle = tokio::spawn(async move {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:3002")
+            .await
+            .expect("Failed to bind JWKS server");
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.set_audience(&["https://example.com"]);
+
+    let decoder = RemoteJwksDecoderBuilder::default()
+        .jwks_url("http://127.0.0.1:3002/.well-known/jwks.json".to_string())
+        .config(
+            RemoteJwksDecoderConfigBuilder::default()
+                .cache_duration(Duration::seconds(5).to_std().unwrap())
+                .retry_count(1)
+                .build()
+                .unwrap(),
+        )
+        .validation(validation)
+        .build()
+        .expect("Failed to build decoder");
+
+    // Start key refresh task
+    let decoder_clone = decoder.clone();
+    let refresh_handle = tokio::spawn(async move {
+        decoder_clone.refresh_keys_periodically().await;
+    });
+
+    // Create multiple concurrent decode attempts
+    let start = std::time::Instant::now();
+
+    let mut handles = vec![];
+    for i in 0..3 {
+        let decoder = decoder.clone();
+        let handle = tokio::spawn(async move {
+            let token = format!("invalid_token_{}", i);
+            let _: Result<TokenData<CustomClaims>, _> = decoder.decode(&token).await; // We expect this to fail, but after initialization
+            std::time::Instant::now()
+        });
+        handles.push(handle);
+    }
+
+    // Wait for all decode attempts
+    let completion_times = futures::future::join_all(handles)
+        .await
+        .into_iter()
+        .map(|r| r.unwrap())
+        .collect::<Vec<_>>();
+
+    // All tasks should complete at roughly the same time (after the initial 2-second delay)
+    for time in &completion_times {
+        let elapsed = time.duration_since(start);
+        assert!(elapsed.as_secs() >= 2, "Task completed too quickly");
+        // Should complete very soon after initialization
+        assert!(elapsed.as_secs() < 3, "Task took too long to complete");
+    }
+
+    // Verify that max difference between completion times is small
+    let max_time = completion_times.iter().max().unwrap();
+    let min_time = completion_times.iter().min().unwrap();
+    let max_diff = max_time.duration_since(*min_time);
+    assert!(max_diff.as_millis() < 100, "Tasks completed too far apart");
 
     // Clean up
     server_handle.abort();
