@@ -35,14 +35,23 @@ pub use crate::remote::{
 pub enum Error {
     #[error("JWT key not found (kid: {0:?})")]
     KeyNotFound(Option<String>),
-    #[error("JWT error: {0}")]
-    Jwt(#[from] jsonwebtoken::errors::Error),
-    #[error("HTTP request error: {0}")]
-    Reqwest(#[from] reqwest::Error),
-    #[error("JWKS refresh failed: {0}")]
-    JwksRefresh(String),
+
     #[error("Configuration error: {0}")]
     Configuration(String),
+
+    #[error("JWT error: {0}")]
+    Jwt(#[from] jsonwebtoken::errors::Error),
+
+    #[error("HTTP request error: {0}")]
+    Reqwest(#[from] reqwest::Error),
+
+    #[error("JWKS refresh failed after {retry_count} attempts: {message}")]
+    JwksRefresh {
+        message: String,
+        retry_count: usize,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
 }
 
 /// A generic trait for decoding JWT tokens.
