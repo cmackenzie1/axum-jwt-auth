@@ -32,19 +32,26 @@ where
 
         let state = JwtDecoderState::from_ref(state);
         // `JwtDecoder::decode` decodes the token
-        let token_data = state.decoder.decode(auth.token()).map_err(|e| match e {
-            crate::Error::Jwt(e) => match e.kind() {
-                jsonwebtoken::errors::ErrorKind::ExpiredSignature => Self::Rejection::ExpiredToken,
-                jsonwebtoken::errors::ErrorKind::InvalidSignature => {
-                    Self::Rejection::InvalidSignature
-                }
-                jsonwebtoken::errors::ErrorKind::InvalidAudience => {
-                    Self::Rejection::InvalidAudience
-                }
-                _ => Self::Rejection::InvalidToken,
-            },
-            _ => Self::Rejection::InternalError,
-        })?;
+        let token_data = state
+            .decoder
+            .clone()
+            .decode(auth.token())
+            .await
+            .map_err(|e| match e {
+                crate::Error::Jwt(e) => match e.kind() {
+                    jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
+                        Self::Rejection::ExpiredToken
+                    }
+                    jsonwebtoken::errors::ErrorKind::InvalidSignature => {
+                        Self::Rejection::InvalidSignature
+                    }
+                    jsonwebtoken::errors::ErrorKind::InvalidAudience => {
+                        Self::Rejection::InvalidAudience
+                    }
+                    _ => Self::Rejection::InvalidToken,
+                },
+                _ => Self::Rejection::InternalError,
+            })?;
 
         Ok(Claims(token_data.claims))
     }

@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use axum::{extract::FromRef, routing::get, Json, Router};
-use axum_jwt_auth::{
-    Claims, JwtDecoderState, RemoteJwksDecoderBuilder,
-};
+use axum_jwt_auth::{Claims, JwtDecoderState, RemoteJwksDecoderBuilder};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -88,8 +86,6 @@ async fn main() {
     tokio::spawn(async move {
         decoder_clone.refresh_keys_periodically().await;
     });
-    // Wait for the JWKS server to start
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     // Create an app server that has the decoder as a state
     let app_server = Router::new()

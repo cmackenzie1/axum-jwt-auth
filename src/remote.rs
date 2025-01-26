@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use dashmap::DashMap;
 use derive_builder::Builder;
 use jsonwebtoken::{jwk::JwkSet, DecodingKey, TokenData, Validation};
 use serde::de::DeserializeOwned;
+use tokio::sync::Notify;
 
 use crate::{Error, JwtDecoder};
 
@@ -13,10 +15,13 @@ const DEFAULT_BACKOFF: std::time::Duration = std::time::Duration::from_secs(1); 
 
 #[derive(Debug, Clone, Builder)]
 pub struct RemoteJwksDecoderConfig {
+    /// How long to cache the JWKS keys for
     #[builder(default = "DEFAULT_CACHE_DURATION")]
     pub cache_duration: std::time::Duration,
+    /// How many times to retry fetching the JWKS keys if it fails
     #[builder(default = "DEFAULT_RETRY_COUNT")]
     pub retry_count: usize,
+    /// How long to wait before retrying fetching the JWKS keys
     #[builder(default = "DEFAULT_BACKOFF")]
     pub backoff: std::time::Duration,
 }
@@ -36,17 +41,26 @@ impl Default for RemoteJwksDecoderConfig {
 /// It uses the cached JWKS to decode the JWT tokens.
 #[derive(Clone, Builder)]
 pub struct RemoteJwksDecoder {
+    /// The URL to fetch the JWKS from
     jwks_url: String,
+    /// The configuration for the decoder
     #[builder(default = "RemoteJwksDecoderConfig::default()")]
     config: RemoteJwksDecoderConfig,
+    /// The cache for the JWKS keys
     #[builder(default = "Arc::new(DashMap::new())")]
     keys_cache: Arc<DashMap<String, DecodingKey>>,
+    /// The validation settings for the JWT tokens
     validation: Validation,
+    /// The HTTP client to use for fetching the JWKS
     #[builder(default = "reqwest::Client::new()")]
     client: reqwest::Client,
+    /// The initialized flag
+    #[builder(default = "Arc::new(Notify::new())")]
+    initialized: Arc<Notify>,
 }
 
 impl RemoteJwksDecoder {
+    /// Creates a new [`RemoteJwksDecoder`] with the given JWKS URL.
     pub fn new(jwks_url: String) -> Self {
         RemoteJwksDecoderBuilder::default()
             .jwks_url(jwks_url)
@@ -54,6 +68,10 @@ impl RemoteJwksDecoder {
             .unwrap()
     }
 
+    /// Refreshes the JWKS cache.
+    /// It retries the refresh up to [`RemoteJwksDecoderConfig::retry_count`] times,
+    /// waiting [`RemoteJwksDecoderConfig::backoff`] seconds between attempts.
+    /// If it fails after all attempts, it returns the error.
     async fn refresh_keys(&self) -> Result<(), Error> {
         let max_attempts = self.config.retry_count;
         let mut attempt = 0;
@@ -74,6 +92,8 @@ impl RemoteJwksDecoder {
         Err(err.unwrap())
     }
 
+    /// Refreshes the JWKS cache once.
+    /// It fetches the JWKS from the given URL and caches the keys.
     async fn refresh_keys_once(&self) -> Result<(), Error> {
         let jwks = self
             .client
@@ -83,12 +103,22 @@ impl RemoteJwksDecoder {
             .json::<JwkSet>()
             .await?;
 
-        self.keys_cache.clear();
+        // Parse all keys first before clearing cache
+        let mut new_keys = Vec::new();
         for jwk in jwks.keys.iter() {
             let key_id = jwk.common.key_id.to_owned();
             let key = DecodingKey::from_jwk(jwk).map_err(Error::Jwt)?;
-            self.keys_cache.insert(key_id.unwrap_or_default(), key);
+            new_keys.push((key_id.unwrap_or_default(), key));
         }
+
+        // Only clear and update cache after all keys parsed successfully
+        self.keys_cache.clear();
+        for (kid, key) in new_keys {
+            self.keys_cache.insert(kid, key);
+        }
+
+        // Notify waiters after the first successful fetch
+        self.initialized.notify_waiters();
 
         Ok(())
     }
@@ -115,17 +145,25 @@ impl RemoteJwksDecoder {
             tokio::time::sleep(self.config.cache_duration).await;
         }
     }
+
+    /// Ensures keys are available before proceeding
+    async fn ensure_initialized(&self) {
+        self.initialized.notified().await;
+    }
 }
 
+#[async_trait]
 impl<T> JwtDecoder<T> for RemoteJwksDecoder
 where
     T: for<'de> DeserializeOwned,
 {
-    fn decode(&self, token: &str) -> Result<TokenData<T>, Error> {
+    async fn decode(&self, token: &str) -> Result<TokenData<T>, Error> {
+        self.ensure_initialized().await;
         let header = jsonwebtoken::decode_header(token)?;
         let target_kid = header.kid;
+
+        // Try matching key ID first if present
         if let Some(ref kid) = target_kid {
-            // Try to find the key in the cache by kid
             if let Some(key) = self.keys_cache.get(kid) {
                 return Ok(jsonwebtoken::decode::<T>(
                     token,
@@ -135,16 +173,20 @@ where
             }
         }
 
-        // Otherwise, try all the keys in the cache, returning the first one that works
-        // If none of them work, return the error from the last one
+        // Try all keys as fallback
+        let mut last_error = None;
         for key in self.keys_cache.iter() {
             match jsonwebtoken::decode::<T>(token, key.value(), &self.validation) {
                 Ok(token_data) => return Ok(token_data),
-                Err(e) => {
-                    tracing::debug!("Failed to decode token with key {}: {:?}", key.key(), e);
-                }
+                Err(e) => last_error = Some(e),
             }
         }
-        Err(Error::KeyNotFound(target_kid))
+
+        // Return last error if we had one, otherwise KeyNotFound
+        if let Some(e) = last_error {
+            Err(Error::Jwt(e))
+        } else {
+            Err(Error::KeyNotFound(target_kid))
+        }
     }
 }
