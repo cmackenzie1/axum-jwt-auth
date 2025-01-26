@@ -31,7 +31,7 @@ cargo check  # Ensure everything builds correctly
 
 ```bash
 # Generate/update for new version
-git cliff --tag v1.2.0 --prepend CHANGELOG.md
+git cliff --prepend CHANGELOG.md --unreleased --tag v1.2.0
 ```
 
 4. Create release branch and commit:
