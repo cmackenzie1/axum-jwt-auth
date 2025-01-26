@@ -8,8 +8,8 @@ use axum::{
 };
 
 use axum_jwt_auth::{
-    Claims, Decoder, JwtDecoder, JwtDecoderState, LocalDecoder, RemoteJwksDecoderBuilder,
-    RemoteJwksDecoderConfigBuilder,
+    Claims, Decoder, JwtDecoder, JwtDecoderState, LocalDecoder, RemoteJwksDecoder,
+    RemoteJwksDecoderConfig,
 };
 use chrono::{Duration, Utc};
 use jsonwebtoken::{encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
@@ -140,10 +140,10 @@ async fn remote_decoder() {
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_audience(&["https://example.com"]);
     // Create remote decoder with test-appropriate config
-    let decoder = RemoteJwksDecoderBuilder::default()
+    let decoder = RemoteJwksDecoder::builder()
         .jwks_url("http://127.0.0.1:3001/.well-known/jwks.json".to_string())
         .config(
-            RemoteJwksDecoderConfigBuilder::default()
+            RemoteJwksDecoderConfig::builder()
                 .cache_duration(Duration::milliseconds(100).to_std().unwrap()) // Short duration for testing
                 .retry_count(1) // Minimal retries for faster tests
                 .backoff(Duration::milliseconds(50).to_std().unwrap()) // Short backoff for testing
@@ -245,10 +245,10 @@ async fn test_remote_decoder_initialization() {
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_audience(&["https://example.com"]);
 
-    let decoder = RemoteJwksDecoderBuilder::default()
+    let decoder = RemoteJwksDecoder::builder()
         .jwks_url("http://127.0.0.1:3002/.well-known/jwks.json".to_string())
         .config(
-            RemoteJwksDecoderConfigBuilder::default()
+            RemoteJwksDecoderConfig::builder()
                 .cache_duration(Duration::seconds(5).to_std().unwrap())
                 .retry_count(1)
                 .build()
