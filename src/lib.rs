@@ -41,6 +41,8 @@ pub enum Error {
     Reqwest(#[from] reqwest::Error),
     #[error("JWKS refresh failed: {0}")]
     JwksRefresh(String),
+    #[error("Configuration error: {0}")]
+    Configuration(String),
 }
 
 /// A generic trait for decoding JWT tokens.

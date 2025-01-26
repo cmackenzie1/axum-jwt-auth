@@ -178,7 +178,6 @@ where
         let header = jsonwebtoken::decode_header(token)?;
         let target_kid = header.kid;
 
-        // Try matching key ID first if present
         if let Some(ref kid) = target_kid {
             if let Some(key) = self.keys_cache.get(kid) {
                 return Ok(jsonwebtoken::decode::<T>(
@@ -187,22 +186,8 @@ where
                     &self.validation,
                 )?);
             }
+            return Err(Error::KeyNotFound(Some(kid.clone())));
         }
-
-        // Try all keys as fallback
-        let mut last_error = None;
-        for key in self.keys_cache.iter() {
-            match jsonwebtoken::decode::<T>(token, key.value(), &self.validation) {
-                Ok(token_data) => return Ok(token_data),
-                Err(e) => last_error = Some(e),
-            }
-        }
-
-        // Return last error if we had one, otherwise KeyNotFound
-        if let Some(e) = last_error {
-            Err(Error::Jwt(e))
-        } else {
-            Err(Error::KeyNotFound(target_kid))
-        }
+        return Err(Error::KeyNotFound(None));
     }
 }
