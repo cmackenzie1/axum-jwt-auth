@@ -26,9 +26,6 @@ jobs:
       - name: Lint (clippy)
         run: cargo clippy --all-features --all-targets
 
-      - name: Build
-        run: cargo build --verbose
-
       - name: Run tests (with coverage)
         run: cargo llvm-cov nextest --profile ci
 
