@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{
     extract::FromRef,
     response::IntoResponse,
@@ -12,10 +14,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, FromRef)]
 struct AppState {
-    decoder: JwtDecoderState,
+    decoder: JwtDecoderState<MyClaims>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MyClaims {
     iat: u64,
     aud: String,
@@ -30,7 +32,8 @@ async fn token_is_valid() {
 
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_audience(&["https://example.com"]);
-    let decoder: Decoder = LocalDecoder::new(vec![decoding_key.to_owned()], validation).into();
+    let decoder: Decoder<MyClaims> =
+        Arc::new(LocalDecoder::new(vec![decoding_key.to_owned()], validation));
     let state = AppState {
         decoder: JwtDecoderState { decoder },
     };
