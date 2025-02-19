@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2025-02-19
+
+### 🚀 Features
+
+- [**breaking**] Add async support and improved initialization for RemoteJwksDecoder
+- [**breaking**] Enhance Axum JWT authentication with improved error handling and token extraction
+
+### 🚜 Refactor
+
+- Simplify RemoteJwksDecoder initialization with builder methods
+- [**breaking**] Enhance LocalDecoder with builder pattern and improved validation
+- Improve error handling for RemoteJwksDecoder
+
+### 📚 Documentation
+
+- Make the remote example more realistic
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove redundant build step
+- Add Makefile, update cliff.toml
+
 ## [0.4.0] - 2025-01-26
 
 ### 🚀 Features
