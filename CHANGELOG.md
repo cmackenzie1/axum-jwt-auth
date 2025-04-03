@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2025-04-03
+
+### 🚀 Features
+
+- Prevent indefinite hang in `ensure_initialized`
+
 ## [0.5.0] - 2025-02-19
 
 ### 🚀 Features
