@@ -167,6 +167,14 @@ impl RemoteJwksDecoder {
 
     /// Ensures keys are available before proceeding
     async fn ensure_initialized(&self) {
+        // If we already have keys, we're already initialized
+        if !self.keys_cache.is_empty() {
+            tracing::trace!("Key store already initialised, continuing.");
+            return;
+        }
+        
+        // If direct initialization failed, fall back to waiting for the background task
+        tracing::trace!("Waiting for background initialization to complete");
         self.initialized.notified().await;
     }
 }
