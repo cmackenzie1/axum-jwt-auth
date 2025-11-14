@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use derive_builder::Builder;
 use jsonwebtoken::{DecodingKey, TokenData, Validation};
 use serde::de::DeserializeOwned;
 
@@ -26,7 +25,7 @@ use crate::{Error, JwtDecoder};
 ///     .build()
 ///     .unwrap();
 /// ```
-#[derive(Clone, Builder)]
+#[derive(Clone)]
 pub struct LocalDecoder {
     keys: Vec<DecodingKey>,
     validation: Validation,
@@ -63,7 +62,46 @@ impl LocalDecoder {
 
     /// Creates a new `LocalDecoderBuilder` for configuring a decoder.
     pub fn builder() -> LocalDecoderBuilder {
-        LocalDecoderBuilder::default()
+        LocalDecoderBuilder {
+            keys: None,
+            validation: None,
+        }
+    }
+}
+
+/// Builder for `LocalDecoder`.
+pub struct LocalDecoderBuilder {
+    keys: Option<Vec<DecodingKey>>,
+    validation: Option<Validation>,
+}
+
+impl LocalDecoderBuilder {
+    /// Sets the decoding keys.
+    pub fn keys(mut self, keys: Vec<DecodingKey>) -> Self {
+        self.keys = Some(keys);
+        self
+    }
+
+    /// Sets the validation settings.
+    pub fn validation(mut self, validation: Validation) -> Self {
+        self.validation = Some(validation);
+        self
+    }
+
+    /// Builds the `LocalDecoder`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::Configuration` if required fields are missing or invalid.
+    pub fn build(self) -> Result<LocalDecoder, Error> {
+        let keys = self
+            .keys
+            .ok_or_else(|| Error::Configuration("keys are required".into()))?;
+        let validation = self
+            .validation
+            .ok_or_else(|| Error::Configuration("validation is required".into()))?;
+
+        LocalDecoder::new(keys, validation)
     }
 }
 

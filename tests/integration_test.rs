@@ -160,8 +160,7 @@ async fn remote_decoder() {
                 .cache_duration(Duration::milliseconds(100).to_std().unwrap()) // Short duration for testing
                 .retry_count(1) // Minimal retries for faster tests
                 .backoff(Duration::milliseconds(50).to_std().unwrap()) // Short backoff for testing
-                .build()
-                .unwrap(),
+                .build(),
         )
         .validation(validation)
         .build()
@@ -262,8 +261,7 @@ async fn test_remote_decoder_initialization() {
             RemoteJwksDecoderConfig::builder()
                 .cache_duration(Duration::seconds(5).to_std().unwrap())
                 .retry_count(1)
-                .build()
-                .unwrap(),
+                .build(),
         )
         .validation(validation)
         .build()
@@ -290,11 +288,10 @@ async fn test_remote_decoder_initialization() {
     }
 
     // Wait for all decode attempts
-    let completion_times = futures::future::join_all(handles)
-        .await
-        .into_iter()
-        .map(|r| r.unwrap())
-        .collect::<Vec<_>>();
+    let mut completion_times = Vec::new();
+    for handle in handles {
+        completion_times.push(handle.await.unwrap());
+    }
 
     // All tasks should complete at roughly the same time (after the initial 2-second delay)
     for time in &completion_times {
