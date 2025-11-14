@@ -405,14 +405,9 @@ mod tests {
     use axum::body::Body;
     use axum::extract::Request;
 
-    #[tokio::test]
-    async fn test_map_jwt_error() {
-        use jsonwebtoken::errors::Error as JwtError;
-
-        let jwt_error = JwtError::from(ErrorKind::ExpiredSignature);
-        let auth_error = map_jwt_error(crate::Error::Jwt(jwt_error));
-        assert!(matches!(auth_error, AuthError::ExpiredSignature));
-    }
+    // ============================================================================
+    // Macro Tests
+    // ============================================================================
 
     #[test]
     fn test_header_extractor_macro() {
@@ -432,9 +427,116 @@ mod tests {
         assert_eq!(TestQuery::value(), "test_param");
     }
 
+    // ============================================================================
+    // Error Mapping Tests
+    // ============================================================================
+
     #[tokio::test]
-    async fn test_bearer_token_extractor() {
-        // Valid token
+    async fn test_map_jwt_error_expired_signature() {
+        use jsonwebtoken::errors::Error as JwtError;
+
+        let jwt_error = JwtError::from(ErrorKind::ExpiredSignature);
+        let auth_error = map_jwt_error(crate::Error::Jwt(jwt_error));
+        assert_eq!(auth_error, AuthError::ExpiredSignature);
+    }
+
+    #[tokio::test]
+    async fn test_map_jwt_error_invalid_signature() {
+        use jsonwebtoken::errors::Error as JwtError;
+
+        let jwt_error = JwtError::from(ErrorKind::InvalidSignature);
+        let auth_error = map_jwt_error(crate::Error::Jwt(jwt_error));
+        assert_eq!(auth_error, AuthError::InvalidSignature);
+    }
+
+    #[tokio::test]
+    async fn test_map_jwt_error_invalid_audience() {
+        use jsonwebtoken::errors::Error as JwtError;
+
+        let jwt_error = JwtError::from(ErrorKind::InvalidAudience);
+        let auth_error = map_jwt_error(crate::Error::Jwt(jwt_error));
+        assert_eq!(auth_error, AuthError::InvalidAudience);
+    }
+
+    #[tokio::test]
+    async fn test_map_jwt_error_invalid_algorithm() {
+        use jsonwebtoken::errors::Error as JwtError;
+
+        let jwt_error = JwtError::from(ErrorKind::InvalidAlgorithm);
+        let auth_error = map_jwt_error(crate::Error::Jwt(jwt_error));
+        assert_eq!(auth_error, AuthError::InvalidAlgorithm);
+    }
+
+    #[tokio::test]
+    async fn test_map_jwt_error_invalid_token() {
+        use jsonwebtoken::errors::Error as JwtError;
+
+        let jwt_error = JwtError::from(ErrorKind::InvalidToken);
+        let auth_error = map_jwt_error(crate::Error::Jwt(jwt_error));
+        assert_eq!(auth_error, AuthError::InvalidToken);
+    }
+
+    #[tokio::test]
+    async fn test_map_jwt_error_invalid_issuer() {
+        use jsonwebtoken::errors::Error as JwtError;
+
+        let jwt_error = JwtError::from(ErrorKind::InvalidIssuer);
+        let auth_error = map_jwt_error(crate::Error::Jwt(jwt_error));
+        assert_eq!(auth_error, AuthError::InvalidIssuer);
+    }
+
+    #[tokio::test]
+    async fn test_map_jwt_error_invalid_subject() {
+        use jsonwebtoken::errors::Error as JwtError;
+
+        let jwt_error = JwtError::from(ErrorKind::InvalidSubject);
+        let auth_error = map_jwt_error(crate::Error::Jwt(jwt_error));
+        assert_eq!(auth_error, AuthError::InvalidSubject);
+    }
+
+    #[tokio::test]
+    async fn test_map_jwt_error_immature_signature() {
+        use jsonwebtoken::errors::Error as JwtError;
+
+        let jwt_error = JwtError::from(ErrorKind::ImmatureSignature);
+        let auth_error = map_jwt_error(crate::Error::Jwt(jwt_error));
+        assert_eq!(auth_error, AuthError::ImmatureSignature);
+    }
+
+    #[tokio::test]
+    async fn test_map_jwt_error_missing_algorithm() {
+        use jsonwebtoken::errors::Error as JwtError;
+
+        let jwt_error = JwtError::from(ErrorKind::MissingAlgorithm);
+        let auth_error = map_jwt_error(crate::Error::Jwt(jwt_error));
+        assert_eq!(auth_error, AuthError::MissingAlgorithm);
+    }
+
+    #[tokio::test]
+    async fn test_map_jwt_error_missing_required_claim() {
+        use jsonwebtoken::errors::Error as JwtError;
+
+        let jwt_error = JwtError::from(ErrorKind::MissingRequiredClaim("sub".to_string()));
+        let auth_error = map_jwt_error(crate::Error::Jwt(jwt_error));
+        assert_eq!(
+            auth_error,
+            AuthError::MissingRequiredClaim("sub".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_map_jwt_error_non_jwt_error() {
+        let error = crate::Error::KeyNotFound(Some("test_kid".to_string()));
+        let auth_error = map_jwt_error(error);
+        assert_eq!(auth_error, AuthError::InternalError);
+    }
+
+    // ============================================================================
+    // BearerTokenExtractor Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_bearer_token_extractor_valid() {
         let req = Request::builder()
             .header("Authorization", "Bearer test_token")
             .body(Body::empty())
@@ -443,18 +545,47 @@ mod tests {
         let token = BearerTokenExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_ok());
         assert_eq!(token.unwrap(), "test_token");
+    }
 
-        // Invalid token
+    #[tokio::test]
+    async fn test_bearer_token_extractor_valid_long_token() {
+        let long_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
         let req = Request::builder()
-            .header("Authorization", "Not a bearer token")
+            .header("Authorization", format!("Bearer {}", long_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let token = BearerTokenExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), long_token);
+    }
+
+    #[tokio::test]
+    async fn test_bearer_token_extractor_invalid_scheme() {
+        let req = Request::builder()
+            .header("Authorization", "Basic dXNlcjpwYXNz")
             .body(Body::empty())
             .unwrap();
 
         let token = BearerTokenExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_err());
         assert_eq!(token.unwrap_err(), AuthError::MissingToken);
+    }
 
-        // Missing token
+    #[tokio::test]
+    async fn test_bearer_token_extractor_malformed_header() {
+        let req = Request::builder()
+            .header("Authorization", "BearerMissingSpace")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = BearerTokenExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_err());
+        assert_eq!(token.unwrap_err(), AuthError::MissingToken);
+    }
+
+    #[tokio::test]
+    async fn test_bearer_token_extractor_missing_header() {
         let req = Request::builder().body(Body::empty()).unwrap();
         let token = BearerTokenExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_err());
@@ -462,17 +593,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_header_token_extractor() {
-        struct XAuthToken;
-        impl ExtractorConfig for XAuthToken {
-            fn value() -> &'static str {
-                "x-auth-token"
-            }
-        }
+    async fn test_bearer_token_extractor_empty_token() {
+        let req = Request::builder()
+            .header("Authorization", "Bearer ")
+            .body(Body::empty())
+            .unwrap();
 
+        let token = BearerTokenExtractor::extract_token(&mut req.into_parts().0).await;
+        // This should succeed as the Bearer scheme is valid, even if the token is empty
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "");
+    }
+
+    #[tokio::test]
+    async fn test_bearer_token_extractor_case_sensitivity() {
+        // Bearer scheme should be case-insensitive according to HTTP spec
+        let req = Request::builder()
+            .header("Authorization", "bearer test_token")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = BearerTokenExtractor::extract_token(&mut req.into_parts().0).await;
+        // axum-extra's Bearer implementation is case-insensitive
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "test_token");
+    }
+
+    // ============================================================================
+    // HeaderTokenExtractor Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_header_token_extractor_valid() {
+        define_header_extractor!(XAuthToken, "x-auth-token");
         type XAuthTokenExtractor = HeaderTokenExtractor<XAuthToken>;
 
-        // Valid token
         let req = Request::builder()
             .header("x-auth-token", "test_token_123")
             .body(Body::empty())
@@ -481,8 +636,13 @@ mod tests {
         let token = XAuthTokenExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_ok());
         assert_eq!(token.unwrap(), "test_token_123");
+    }
 
-        // Missing header
+    #[tokio::test]
+    async fn test_header_token_extractor_missing_header() {
+        define_header_extractor!(XAuthToken2, "x-auth-token");
+        type XAuthTokenExtractor = HeaderTokenExtractor<XAuthToken2>;
+
         let req = Request::builder().body(Body::empty()).unwrap();
         let token = XAuthTokenExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_err());
@@ -490,17 +650,60 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_cookie_token_extractor() {
-        struct AuthTokenCookie;
-        impl ExtractorConfig for AuthTokenCookie {
-            fn value() -> &'static str {
-                "auth_token"
-            }
-        }
+    async fn test_header_token_extractor_empty_value() {
+        define_header_extractor!(XAuthToken3, "x-auth-token");
+        type XAuthTokenExtractor = HeaderTokenExtractor<XAuthToken3>;
 
+        let req = Request::builder()
+            .header("x-auth-token", "")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = XAuthTokenExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "");
+    }
+
+    #[tokio::test]
+    async fn test_header_token_extractor_special_characters() {
+        define_header_extractor!(XAuthToken4, "x-auth-token");
+        type XAuthTokenExtractor = HeaderTokenExtractor<XAuthToken4>;
+
+        let req = Request::builder()
+            .header("x-auth-token", "token-with-special.chars_123")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = XAuthTokenExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "token-with-special.chars_123");
+    }
+
+    #[tokio::test]
+    async fn test_header_token_extractor_different_header_names() {
+        define_header_extractor!(ApiKey, "x-api-key");
+        type ApiKeyExtractor = HeaderTokenExtractor<ApiKey>;
+
+        let req = Request::builder()
+            .header("x-api-key", "api_key_value")
+            .header("x-auth-token", "auth_token_value")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = ApiKeyExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "api_key_value");
+    }
+
+    // ============================================================================
+    // CookieTokenExtractor Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_cookie_token_extractor_valid() {
+        define_cookie_extractor!(AuthTokenCookie, "auth_token");
         type AuthCookieExtractor = CookieTokenExtractor<AuthTokenCookie>;
 
-        // Valid cookie
         let req = Request::builder()
             .header("Cookie", "auth_token=my_jwt_token; other=value")
             .body(Body::empty())
@@ -509,8 +712,28 @@ mod tests {
         let token = AuthCookieExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_ok());
         assert_eq!(token.unwrap(), "my_jwt_token");
+    }
 
-        // Missing cookie
+    #[tokio::test]
+    async fn test_cookie_token_extractor_single_cookie() {
+        define_cookie_extractor!(AuthTokenCookie2, "auth_token");
+        type AuthCookieExtractor = CookieTokenExtractor<AuthTokenCookie2>;
+
+        let req = Request::builder()
+            .header("Cookie", "auth_token=my_jwt_token")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = AuthCookieExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "my_jwt_token");
+    }
+
+    #[tokio::test]
+    async fn test_cookie_token_extractor_missing_cookie() {
+        define_cookie_extractor!(AuthTokenCookie3, "auth_token");
+        type AuthCookieExtractor = CookieTokenExtractor<AuthTokenCookie3>;
+
         let req = Request::builder()
             .header("Cookie", "other=value")
             .body(Body::empty())
@@ -518,8 +741,13 @@ mod tests {
         let token = AuthCookieExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_err());
         assert_eq!(token.unwrap_err(), AuthError::MissingToken);
+    }
 
-        // No cookies at all
+    #[tokio::test]
+    async fn test_cookie_token_extractor_no_cookies() {
+        define_cookie_extractor!(AuthTokenCookie4, "auth_token");
+        type AuthCookieExtractor = CookieTokenExtractor<AuthTokenCookie4>;
+
         let req = Request::builder().body(Body::empty()).unwrap();
         let token = AuthCookieExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_err());
@@ -527,17 +755,59 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_query_token_extractor() {
-        struct TokenParam;
-        impl ExtractorConfig for TokenParam {
-            fn value() -> &'static str {
-                "token"
-            }
-        }
+    async fn test_cookie_token_extractor_multiple_cookies() {
+        define_cookie_extractor!(AuthTokenCookie5, "auth_token");
+        type AuthCookieExtractor = CookieTokenExtractor<AuthTokenCookie5>;
 
+        let req = Request::builder()
+            .header("Cookie", "session=abc123; auth_token=my_jwt; user_id=456")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = AuthCookieExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "my_jwt");
+    }
+
+    #[tokio::test]
+    async fn test_cookie_token_extractor_empty_value() {
+        define_cookie_extractor!(AuthTokenCookie6, "auth_token");
+        type AuthCookieExtractor = CookieTokenExtractor<AuthTokenCookie6>;
+
+        let req = Request::builder()
+            .header("Cookie", "auth_token=")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = AuthCookieExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "");
+    }
+
+    #[tokio::test]
+    async fn test_cookie_token_extractor_with_spaces() {
+        define_cookie_extractor!(AuthTokenCookie7, "auth_token");
+        type AuthCookieExtractor = CookieTokenExtractor<AuthTokenCookie7>;
+
+        let req = Request::builder()
+            .header("Cookie", "auth_token=my_jwt_token;  other=value")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = AuthCookieExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "my_jwt_token");
+    }
+
+    // ============================================================================
+    // QueryTokenExtractor Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_query_token_extractor_valid() {
+        define_query_extractor!(TokenParam, "token");
         type TokenParamExtractor = QueryTokenExtractor<TokenParam>;
 
-        // Valid query parameter
         let req = Request::builder()
             .uri("http://example.com/api?token=my_jwt_token&other=value")
             .body(Body::empty())
@@ -546,8 +816,28 @@ mod tests {
         let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_ok());
         assert_eq!(token.unwrap(), "my_jwt_token");
+    }
 
-        // Missing parameter
+    #[tokio::test]
+    async fn test_query_token_extractor_single_param() {
+        define_query_extractor!(TokenParam2, "token");
+        type TokenParamExtractor = QueryTokenExtractor<TokenParam2>;
+
+        let req = Request::builder()
+            .uri("http://example.com/api?token=my_jwt_token")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "my_jwt_token");
+    }
+
+    #[tokio::test]
+    async fn test_query_token_extractor_missing_parameter() {
+        define_query_extractor!(TokenParam3, "token");
+        type TokenParamExtractor = QueryTokenExtractor<TokenParam3>;
+
         let req = Request::builder()
             .uri("http://example.com/api?other=value")
             .body(Body::empty())
@@ -555,8 +845,13 @@ mod tests {
         let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_err());
         assert_eq!(token.unwrap_err(), AuthError::MissingToken);
+    }
 
-        // No query string
+    #[tokio::test]
+    async fn test_query_token_extractor_no_query_string() {
+        define_query_extractor!(TokenParam4, "token");
+        type TokenParamExtractor = QueryTokenExtractor<TokenParam4>;
+
         let req = Request::builder()
             .uri("http://example.com/api")
             .body(Body::empty())
@@ -564,5 +859,116 @@ mod tests {
         let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_err());
         assert_eq!(token.unwrap_err(), AuthError::MissingToken);
+    }
+
+    #[tokio::test]
+    async fn test_query_token_extractor_empty_value() {
+        define_query_extractor!(TokenParam5, "token");
+        type TokenParamExtractor = QueryTokenExtractor<TokenParam5>;
+
+        let req = Request::builder()
+            .uri("http://example.com/api?token=")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "");
+    }
+
+    #[tokio::test]
+    async fn test_query_token_extractor_multiple_params() {
+        define_query_extractor!(TokenParam6, "token");
+        type TokenParamExtractor = QueryTokenExtractor<TokenParam6>;
+
+        let req = Request::builder()
+            .uri("http://example.com/api?user=john&token=my_jwt&format=json")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "my_jwt");
+    }
+
+    #[tokio::test]
+    async fn test_query_token_extractor_url_encoded() {
+        define_query_extractor!(TokenParam7, "token");
+        type TokenParamExtractor = QueryTokenExtractor<TokenParam7>;
+
+        let req = Request::builder()
+            .uri("http://example.com/api?token=value%2Bwith%2Bplus")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "value%2Bwith%2Bplus");
+    }
+
+    #[tokio::test]
+    async fn test_query_token_extractor_partial_match() {
+        define_query_extractor!(TokenParam8, "token");
+        type TokenParamExtractor = QueryTokenExtractor<TokenParam8>;
+
+        // Should not match "refresh_token" when looking for "token"
+        let req = Request::builder()
+            .uri("http://example.com/api?refresh_token=my_jwt")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_err());
+        assert_eq!(token.unwrap_err(), AuthError::MissingToken);
+    }
+
+    #[tokio::test]
+    async fn test_query_token_extractor_first_occurrence() {
+        define_query_extractor!(TokenParam9, "token");
+        type TokenParamExtractor = QueryTokenExtractor<TokenParam9>;
+
+        // If token appears multiple times, should get the first one
+        let req = Request::builder()
+            .uri("http://example.com/api?token=first&other=value&token=second")
+            .body(Body::empty())
+            .unwrap();
+
+        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap(), "first");
+    }
+
+    // ============================================================================
+    // AuthError IntoResponse Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_auth_error_invalid_token_response() {
+        let response = AuthError::InvalidToken.into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_auth_error_expired_signature_response() {
+        let response = AuthError::ExpiredSignature.into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_auth_error_internal_error_response() {
+        let response = AuthError::InternalError.into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_auth_error_missing_token_response() {
+        let response = AuthError::MissingToken.into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_auth_error_missing_required_claim_response() {
+        let response = AuthError::MissingRequiredClaim("sub".to_string()).into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }
