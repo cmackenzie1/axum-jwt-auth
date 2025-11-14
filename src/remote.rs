@@ -172,7 +172,7 @@ impl RemoteJwksDecoder {
             tracing::trace!("Key store already initialised, continuing.");
             return;
         }
-        
+
         // If direct initialization failed, fall back to waiting for the background task
         tracing::trace!("Waiting for background initialization to complete");
         self.initialized.notified().await;

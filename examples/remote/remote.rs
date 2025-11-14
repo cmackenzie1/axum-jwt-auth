@@ -39,8 +39,8 @@ async fn jwks_handler() -> Json<Value> {
 
 /// This is a protected route that requires a valid JWT token to be passed in the Authorization header
 /// It uses the `Claims` extractor to get the claims from the token
-async fn protected_route(Claims(claims): Claims<CustomClaims>) -> Json<CustomClaims> {
-    Json(claims)
+async fn protected_route(user: Claims<CustomClaims>) -> Json<CustomClaims> {
+    Json(user.claims)
 }
 
 /// This is a state struct that holds the JWT decoder
