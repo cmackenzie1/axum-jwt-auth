@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2025-11-14
+
+### 🚀 Features
+
+- **Graceful shutdown**: `RemoteJwksDecoder::initialize()` now returns a `CancellationToken` for graceful shutdown of background refresh tasks
+- **Fail-fast initialization**: Removed defensive `ensure_initialized()` in favor of clearer fail-fast error on decode before initialization
+
+### 🚜 Refactor
+
+- **Dependency reduction**: Removed `futures`, `derive_builder`, and `async-trait` dependencies (23% reduction)
+- **Native async traits**: Migrated to Rust 1.85 native async traits using `Pin<Box<dyn Future>>` and RPITIT
+- **Manual builders**: Implemented manual builder patterns for `LocalDecoder` and `RemoteJwksDecoder`
+- **Edition 2024**: Updated to Rust edition 2024 with MSRV 1.85
+
+### 📚 Documentation
+
+- Added remote JWKS example to README
+- Updated all examples to demonstrate graceful shutdown pattern
+
 ## [0.6.0] - 2025-11-14
 
 - [**breaking**] Refactored `Claims<T>` from tuple struct to named struct with public `claims` field for cleaner API
