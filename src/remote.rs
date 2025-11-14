@@ -3,7 +3,6 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use jsonwebtoken::{DecodingKey, TokenData, Validation, jwk::JwkSet};
 use serde::de::DeserializeOwned;
-use tokio::sync::Notify;
 
 use crate::{Error, JwtDecoder};
 
@@ -82,7 +81,7 @@ impl RemoteJwksDecoderConfigBuilder {
 /// JWT decoder that fetches and caches keys from a remote JWKS endpoint.
 ///
 /// Automatically fetches JWKS from the specified URL, caches keys by their `kid` (key ID),
-/// and periodically refreshes them. Includes retry logic for robustness.
+/// and periodically refreshes them in the background. Includes retry logic for robustness.
 ///
 /// # Example
 ///
@@ -96,11 +95,8 @@ impl RemoteJwksDecoderConfigBuilder {
 ///     .build()
 ///     .unwrap();
 ///
-/// // Spawn background refresh task
-/// let decoder_clone = decoder.clone();
-/// tokio::spawn(async move {
-///     decoder_clone.refresh_keys_periodically().await;
-/// });
+/// // Initialize: fetch keys and start background refresh task
+/// decoder.initialize().await.unwrap();
 /// ```
 #[derive(Clone)]
 pub struct RemoteJwksDecoder {
@@ -114,8 +110,6 @@ pub struct RemoteJwksDecoder {
     validation: Validation,
     /// HTTP client for fetching JWKS
     client: reqwest::Client,
-    /// Notification for initialization completion
-    initialized: Arc<Notify>,
 }
 
 impl RemoteJwksDecoder {
@@ -131,6 +125,51 @@ impl RemoteJwksDecoder {
     /// Creates a new builder for configuring a remote JWKS decoder.
     pub fn builder() -> RemoteJwksDecoderBuilder {
         RemoteJwksDecoderBuilder::new()
+    }
+
+    /// Performs an initial fetch of JWKS keys and starts the background refresh task.
+    ///
+    /// This method should be called once after construction. It will:
+    /// 1. Immediately fetch keys from the JWKS endpoint
+    /// 2. Spawn a background task to periodically refresh keys
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the initial fetch fails after all retry attempts.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let decoder = RemoteJwksDecoder::builder()
+    ///     .jwks_url("https://example.com/.well-known/jwks.json".to_string())
+    ///     .validation(Validation::new(Algorithm::RS256))
+    ///     .build()?;
+    ///
+    /// // Fetch keys and start background refresh - that's it!
+    /// decoder.initialize().await?;
+    /// ```
+    pub async fn initialize(&self) -> Result<(), Error> {
+        // Fetch keys immediately
+        self.refresh_keys().await?;
+
+        // Spawn background refresh task
+        let decoder_clone = self.clone();
+        tokio::spawn(async move {
+            decoder_clone.refresh_keys_periodically().await;
+        });
+
+        Ok(())
+    }
+
+    /// Manually triggers a JWKS refresh with retry logic.
+    ///
+    /// Useful for forcing an update outside the normal refresh cycle.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the refresh fails after all retry attempts.
+    pub async fn refresh(&self) -> Result<(), Error> {
+        self.refresh_keys().await
     }
 
     /// Refreshes the JWKS cache with retry logic.
@@ -189,9 +228,6 @@ impl RemoteJwksDecoder {
             self.keys_cache.insert(kid, key);
         }
 
-        // Notify waiters after the first successful fetch
-        self.initialized.notify_waiters();
-
         Ok(())
     }
 
@@ -232,20 +268,20 @@ impl RemoteJwksDecoder {
         }
     }
 
-    /// Ensures the key cache is initialized before attempting token validation.
+    /// Checks that the key cache has been initialized.
     ///
-    /// If the cache is empty, waits for the background refresh task to complete
-    /// the first successful key fetch.
-    async fn ensure_initialized(&self) {
-        // If we already have keys, we're already initialized
-        if !self.keys_cache.is_empty() {
-            tracing::trace!("Key store already initialised, continuing.");
-            return;
+    /// # Errors
+    ///
+    /// Returns `Error::Configuration` if the cache is empty, which indicates
+    /// that `initialize()` was never called.
+    fn check_initialized(&self) -> Result<(), Error> {
+        if self.keys_cache.is_empty() {
+            Err(Error::Configuration(
+                "JWKS decoder not initialized: call initialize() after building the decoder".into(),
+            ))
+        } else {
+            Ok(())
         }
-
-        // If direct initialization failed, fall back to waiting for the background task
-        tracing::trace!("Waiting for background initialization to complete");
-        self.initialized.notified().await;
     }
 }
 
@@ -256,7 +292,6 @@ pub struct RemoteJwksDecoderBuilder {
     keys_cache: Option<Arc<DashMap<String, DecodingKey>>>,
     validation: Option<Validation>,
     client: Option<reqwest::Client>,
-    initialized: Option<Arc<Notify>>,
 }
 
 impl RemoteJwksDecoderBuilder {
@@ -268,7 +303,6 @@ impl RemoteJwksDecoderBuilder {
             keys_cache: None,
             validation: None,
             client: None,
-            initialized: None,
         }
     }
 
@@ -302,12 +336,6 @@ impl RemoteJwksDecoderBuilder {
         self
     }
 
-    /// Sets the initialized notifier.
-    pub fn initialized(mut self, initialized: Arc<Notify>) -> Self {
-        self.initialized = Some(initialized);
-        self
-    }
-
     /// Builds the `RemoteJwksDecoder`.
     ///
     /// # Errors
@@ -322,13 +350,21 @@ impl RemoteJwksDecoderBuilder {
             .validation
             .ok_or_else(|| Error::Configuration("validation is required".into()))?;
 
+        // Configure client with sensible timeouts if not provided
+        let client = self.client.unwrap_or_else(|| {
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .connect_timeout(std::time::Duration::from_secs(5))
+                .build()
+                .expect("Failed to build HTTP client")
+        });
+
         Ok(RemoteJwksDecoder {
             jwks_url,
             config: self.config.unwrap_or_default(),
             keys_cache: self.keys_cache.unwrap_or_else(|| Arc::new(DashMap::new())),
             validation,
-            client: self.client.unwrap_or_default(),
-            initialized: self.initialized.unwrap_or_else(|| Arc::new(Notify::new())),
+            client,
         })
     }
 }
@@ -349,7 +385,7 @@ where
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<TokenData<T>, Error>> + Send + 'a>>
     {
         Box::pin(async move {
-            self.ensure_initialized().await;
+            self.check_initialized()?;
             let header = jsonwebtoken::decode_header(token)?;
             let target_kid = header.kid;
 

@@ -119,11 +119,11 @@ async fn main() {
 
     let decoder = Arc::new(decoder);
 
-    // Start background task to periodically refresh JWKS
-    let decoder_clone = decoder.clone();
-    tokio::spawn(async move {
-        decoder_clone.refresh_keys_periodically().await;
-    });
+    // Initialize: fetch keys immediately and start background refresh task
+    decoder
+        .initialize()
+        .await
+        .expect("Failed to initialize JWKS decoder");
 
     // Create application state
     let state = AppState {

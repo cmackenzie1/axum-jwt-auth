@@ -80,11 +80,11 @@ async fn main() {
         .expect("Failed to build JWKS decoder");
     let decoder = Arc::new(decoder);
 
-    // Start background task to periodically refresh JWKS
-    let decoder_clone = decoder.clone();
-    tokio::spawn(async move {
-        decoder_clone.refresh_keys_periodically().await;
-    });
+    // Initialize: fetch keys immediately and start background refresh task
+    decoder
+        .initialize()
+        .await
+        .expect("Failed to initialize JWKS decoder");
 
     // Create an app server that has the decoder as a state
     let app_server = Router::new()
