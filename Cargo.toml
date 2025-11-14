@@ -10,7 +10,7 @@ repository = "https://github.com/cmackenzie1/axum-jwt-auth"
 [dependencies]
 async-trait = "0.1"
 axum = { version = "0.8", features = ["macros"] }
-axum-extra = { version = "0.12.1", features = ["typed-header", "cookie"] }
+axum-extra = { version = "0.12", features = ["typed-header", "cookie"] }
 dashmap = "6.1.0"
 derive_builder = "0.20.2"
 futures = "0.3"
