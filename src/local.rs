@@ -5,8 +5,27 @@ use serde::de::DeserializeOwned;
 
 use crate::{Error, JwtDecoder};
 
-/// Local decoder
-/// It uses the given JWKS to decode the JWT tokens.
+/// JWT decoder that validates tokens using locally stored keys.
+///
+/// Supports multiple decoding keys and tries them sequentially until one succeeds.
+/// Ideal for scenarios with key rotation or multiple valid signing keys.
+///
+/// # Example
+///
+/// ```ignore
+/// use axum_jwt_auth::LocalDecoder;
+/// use jsonwebtoken::{DecodingKey, Algorithm, Validation};
+///
+/// let keys = vec![DecodingKey::from_secret(b"secret")];
+/// let mut validation = Validation::new(Algorithm::HS256);
+/// validation.set_audience(&["my-app"]);
+///
+/// let decoder = LocalDecoder::builder()
+///     .keys(keys)
+///     .validation(validation)
+///     .build()
+///     .unwrap();
+/// ```
 #[derive(Clone, Builder)]
 pub struct LocalDecoder {
     keys: Vec<DecodingKey>,
@@ -14,6 +33,14 @@ pub struct LocalDecoder {
 }
 
 impl LocalDecoder {
+    /// Creates a new `LocalDecoder` with the specified keys and validation settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::Configuration` if:
+    /// - No decoding keys are provided
+    /// - No validation algorithms are configured
+    /// - No audience is specified in validation
     pub fn new(keys: Vec<DecodingKey>, validation: Validation) -> Result<Self, Error> {
         if keys.is_empty() {
             return Err(Error::Configuration("No decoding keys provided".into()));
@@ -34,6 +61,7 @@ impl LocalDecoder {
         Ok(Self { keys, validation })
     }
 
+    /// Creates a new `LocalDecoderBuilder` for configuring a decoder.
     pub fn builder() -> LocalDecoderBuilder {
         LocalDecoderBuilder::default()
     }

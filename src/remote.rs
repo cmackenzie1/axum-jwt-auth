@@ -13,15 +13,16 @@ const DEFAULT_CACHE_DURATION: std::time::Duration = std::time::Duration::from_se
 const DEFAULT_RETRY_COUNT: usize = 3; // 3 attempts
 const DEFAULT_BACKOFF: std::time::Duration = std::time::Duration::from_secs(1); // 1 second
 
+/// Configuration for remote JWKS fetching and caching behavior.
 #[derive(Debug, Clone, Builder)]
 pub struct RemoteJwksDecoderConfig {
-    /// How long to cache the JWKS keys for
+    /// Duration to cache JWKS keys before refreshing (default: 1 hour)
     #[builder(default = "DEFAULT_CACHE_DURATION")]
     pub cache_duration: std::time::Duration,
-    /// How many times to retry fetching the JWKS keys if it fails
+    /// Number of retry attempts when fetching JWKS fails (default: 3)
     #[builder(default = "DEFAULT_RETRY_COUNT")]
     pub retry_count: usize,
-    /// How long to wait before retrying fetching the JWKS keys
+    /// Delay between retry attempts (default: 1 second)
     #[builder(default = "DEFAULT_BACKOFF")]
     pub backoff: std::time::Duration,
 }
@@ -37,39 +38,61 @@ impl Default for RemoteJwksDecoderConfig {
 }
 
 impl RemoteJwksDecoderConfig {
-    /// Creates a new [`RemoteJwksDecoderConfigBuilder`].
-    ///
-    /// This is a convenience method to create a builder for the config.
+    /// Creates a new builder for configuring JWKS fetching behavior.
     pub fn builder() -> RemoteJwksDecoderConfigBuilder {
         RemoteJwksDecoderConfigBuilder::default()
     }
 }
 
-/// Remote JWKS decoder.
-/// It fetches the JWKS from the given URL and caches it for the given duration.
-/// It uses the cached JWKS to decode the JWT tokens.
+/// JWT decoder that fetches and caches keys from a remote JWKS endpoint.
+///
+/// Automatically fetches JWKS from the specified URL, caches keys by their `kid` (key ID),
+/// and periodically refreshes them. Includes retry logic for robustness.
+///
+/// # Example
+///
+/// ```ignore
+/// use axum_jwt_auth::RemoteJwksDecoder;
+/// use jsonwebtoken::{Algorithm, Validation};
+///
+/// let decoder = RemoteJwksDecoder::builder()
+///     .jwks_url("https://example.com/.well-known/jwks.json".to_string())
+///     .validation(Validation::new(Algorithm::RS256))
+///     .build()
+///     .unwrap();
+///
+/// // Spawn background refresh task
+/// let decoder_clone = decoder.clone();
+/// tokio::spawn(async move {
+///     decoder_clone.refresh_keys_periodically().await;
+/// });
+/// ```
 #[derive(Clone, Builder)]
 pub struct RemoteJwksDecoder {
-    /// The URL to fetch the JWKS from
+    /// The JWKS endpoint URL
     jwks_url: String,
-    /// The configuration for the decoder
+    /// Configuration for caching and retry behavior
     #[builder(default = "RemoteJwksDecoderConfig::default()")]
     config: RemoteJwksDecoderConfig,
-    /// The cache for the JWKS keys
+    /// Thread-safe cache mapping key IDs to decoding keys
     #[builder(default = "Arc::new(DashMap::new())")]
     keys_cache: Arc<DashMap<String, DecodingKey>>,
-    /// The validation settings for the JWT tokens
+    /// JWT validation settings
     validation: Validation,
-    /// The HTTP client to use for fetching the JWKS
+    /// HTTP client for fetching JWKS
     #[builder(default = "reqwest::Client::new()")]
     client: reqwest::Client,
-    /// The initialized flag
+    /// Notification for initialization completion
     #[builder(default = "Arc::new(Notify::new())")]
     initialized: Arc<Notify>,
 }
 
 impl RemoteJwksDecoder {
-    /// Creates a new [`RemoteJwksDecoder`] with the given JWKS URL.
+    /// Creates a new `RemoteJwksDecoder` with the given JWKS URL and default settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::Configuration` if the builder fails to construct the decoder.
     pub fn new(jwks_url: String) -> Result<Self, Error> {
         RemoteJwksDecoderBuilder::default()
             .jwks_url(jwks_url)
@@ -77,17 +100,18 @@ impl RemoteJwksDecoder {
             .map_err(|e| Error::Configuration(e.to_string()))
     }
 
-    /// Creates a new [`RemoteJwksDecoderBuilder`].
-    ///
-    /// This is a convenience method to create a builder for the decoder.
+    /// Creates a new builder for configuring a remote JWKS decoder.
     pub fn builder() -> RemoteJwksDecoderBuilder {
         RemoteJwksDecoderBuilder::default()
     }
 
-    /// Refreshes the JWKS cache.
-    /// It retries the refresh up to [`RemoteJwksDecoderConfig::retry_count`] times,
-    /// waiting [`RemoteJwksDecoderConfig::backoff`] seconds between attempts.
-    /// If it fails after all attempts, it returns the error.
+    /// Refreshes the JWKS cache with retry logic.
+    ///
+    /// Retries up to `config.retry_count` times, waiting `config.backoff` duration between attempts.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::JwksRefresh` if all retry attempts fail.
     async fn refresh_keys(&self) -> Result<(), Error> {
         let max_attempts = self.config.retry_count;
         let mut attempt = 0;
@@ -111,8 +135,9 @@ impl RemoteJwksDecoder {
         })
     }
 
-    /// Refreshes the JWKS cache once.
-    /// It fetches the JWKS from the given URL and caches the keys.
+    /// Fetches JWKS from the remote URL and updates the cache.
+    ///
+    /// Parses all keys before updating the cache to ensure atomicity.
     async fn refresh_keys_once(&self) -> Result<(), Error> {
         let jwks = self
             .client
@@ -142,11 +167,25 @@ impl RemoteJwksDecoder {
         Ok(())
     }
 
-    /// Refreshes the JWKS cache periodically.
-    /// It runs in a loop and never returns, so it should be run in a separate tokio task
-    /// using [`tokio::spawn`]. If the JWKS refresh fails after multiple attemps,
-    /// it logs the error and continues. The decoder will use the stale keys until the next refresh
-    /// succeeds or the universe ends, whichever comes first.
+    /// Runs an infinite loop that periodically refreshes the JWKS cache.
+    ///
+    /// This method never returns and should be spawned in a background task using `tokio::spawn`.
+    /// Refresh failures are logged, and the decoder continues using stale keys until the next
+    /// successful refresh.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let decoder = RemoteJwksDecoder::builder()
+    ///     .jwks_url("https://example.com/.well-known/jwks.json".to_string())
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// let decoder_clone = decoder.clone();
+    /// tokio::spawn(async move {
+    ///     decoder_clone.refresh_keys_periodically().await;
+    /// });
+    /// ```
     pub async fn refresh_keys_periodically(&self) {
         loop {
             tracing::info!("Refreshing JWKS");
@@ -165,7 +204,10 @@ impl RemoteJwksDecoder {
         }
     }
 
-    /// Ensures keys are available before proceeding
+    /// Ensures the key cache is initialized before attempting token validation.
+    ///
+    /// If the cache is empty, waits for the background refresh task to complete
+    /// the first successful key fetch.
     async fn ensure_initialized(&self) {
         // If we already have keys, we're already initialized
         if !self.keys_cache.is_empty() {

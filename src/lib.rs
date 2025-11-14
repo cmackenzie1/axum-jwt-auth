@@ -82,20 +82,26 @@ pub use crate::remote::{
     RemoteJwksDecoderConfigBuilder,
 };
 
+/// Errors that can occur during JWT decoding and validation.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// The JWT's `kid` (key ID) was not found in the key cache.
     #[error("JWT key not found (kid: {0:?})")]
     KeyNotFound(Option<String>),
 
+    /// Invalid decoder configuration (e.g., missing keys, algorithms, or audience).
     #[error("Configuration error: {0}")]
     Configuration(String),
 
+    /// JWT validation or decoding error from the `jsonwebtoken` crate.
     #[error("JWT error: {0}")]
     Jwt(#[from] jsonwebtoken::errors::Error),
 
+    /// HTTP request error when fetching remote JWKS.
     #[error("HTTP request error: {0}")]
     Reqwest(#[from] reqwest::Error),
 
+    /// JWKS refresh failed after exhausting all retry attempts.
     #[error("JWKS refresh failed after {retry_count} attempts: {message}")]
     JwksRefresh {
         message: String,
@@ -105,16 +111,25 @@ pub enum Error {
     },
 }
 
-/// A generic trait for decoding JWT tokens.
+/// Trait for decoding and validating JWT tokens.
 ///
-/// This trait is implemented for both `LocalDecoder` and `RemoteJwksDecoder`
+/// Implemented by [`LocalDecoder`] and [`RemoteJwksDecoder`] to provide
+/// a unified interface for JWT validation with different key sources.
 #[async_trait]
 pub trait JwtDecoder<T>
 where
     T: for<'de> DeserializeOwned,
 {
+    /// Decodes and validates a JWT token string, returning the parsed claims.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the token is invalid, expired, has an invalid signature,
+    /// or if the key cannot be found (for remote decoders).
     async fn decode(&self, token: &str) -> Result<TokenData<T>, Error>;
 }
 
-/// A type alias for a decoder that can be used as a state in an Axum application.
+/// Type alias for a thread-safe, trait-object decoder suitable for Axum state.
+///
+/// Use this with `Arc::new(decoder)` to share a decoder across request handlers.
 pub type Decoder<T> = Arc<dyn JwtDecoder<T> + Send + Sync>;
