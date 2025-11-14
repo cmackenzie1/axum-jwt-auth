@@ -150,6 +150,9 @@ async fn remote_decoder() {
         axum::serve(listener, app).await.unwrap();
     });
 
+    // Give server time to start
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_audience(&["https://example.com"]);
     // Create remote decoder with test-appropriate config
@@ -166,11 +169,11 @@ async fn remote_decoder() {
         .build()
         .expect("Failed to build decoder");
 
-    // Start key refresh task
-    let decoder_clone = decoder.clone();
-    let refresh_handle = tokio::spawn(async move {
-        decoder_clone.refresh_keys_periodically().await;
-    });
+    // Initialize: fetch keys and start background refresh
+    decoder
+        .initialize()
+        .await
+        .expect("Failed to initialize decoder");
 
     // Test decoding with valid token
     let claims = CustomClaims {
@@ -218,7 +221,7 @@ async fn remote_decoder() {
 
     // Clean up
     server_handle.abort();
-    refresh_handle.abort();
+    // Background refresh task is automatically managed
 }
 
 #[tokio::test]
@@ -252,6 +255,9 @@ async fn test_remote_decoder_initialization() {
         axum::serve(listener, app).await.unwrap();
     });
 
+    // Give server time to start
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_audience(&["https://example.com"]);
 
@@ -267,11 +273,23 @@ async fn test_remote_decoder_initialization() {
         .build()
         .expect("Failed to build decoder");
 
-    // Start key refresh task
-    let decoder_clone = decoder.clone();
-    let refresh_handle = tokio::spawn(async move {
-        decoder_clone.refresh_keys_periodically().await;
-    });
+    // Initialize with the delayed server - this will take 2 seconds
+    let start = std::time::Instant::now();
+    decoder
+        .initialize()
+        .await
+        .expect("Failed to initialize decoder");
+    let init_duration = start.elapsed();
+
+    // Verify initialization took approximately 2 seconds (the mock delay)
+    assert!(
+        init_duration.as_secs() >= 2,
+        "Initialization should take at least 2 seconds due to mock delay"
+    );
+    assert!(
+        init_duration.as_secs() < 3,
+        "Initialization should complete within 3 seconds"
+    );
 
     // Create multiple concurrent decode attempts
     let start = std::time::Instant::now();
@@ -293,21 +311,19 @@ async fn test_remote_decoder_initialization() {
         completion_times.push(handle.await.unwrap());
     }
 
-    // All tasks should complete at roughly the same time (after the initial 2-second delay)
+    // All tasks should complete quickly since initialization is already done
     for time in &completion_times {
         let elapsed = time.duration_since(start);
-        assert!(elapsed.as_secs() >= 2, "Task completed too quickly");
-        // Should complete very soon after initialization
-        assert!(elapsed.as_secs() < 3, "Task took too long to complete");
+        // Should complete almost immediately
+        assert!(elapsed.as_millis() < 100, "Task took too long to complete");
     }
 
-    // Verify that max difference between completion times is small
+    // Verify that all tasks completed at roughly the same time
     let max_time = completion_times.iter().max().unwrap();
     let min_time = completion_times.iter().min().unwrap();
     let max_diff = max_time.duration_since(*min_time);
-    assert!(max_diff.as_millis() < 100, "Tasks completed too far apart");
+    assert!(max_diff.as_millis() < 50, "Tasks completed too far apart");
 
     // Clean up
     server_handle.abort();
-    refresh_handle.abort();
 }

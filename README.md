@@ -60,6 +60,44 @@ async fn main() {
 - **Type-safe claims**: Strongly-typed claims via generic extractors
 - **Axum integration**: Drop-in extractor for route handlers
 
+## Remote JWKS
+
+Validate JWTs using remote JWKS endpoints with automatic caching and refresh:
+
+```rust
+use axum_jwt_auth::{Claims, JwtDecoderState, RemoteJwksDecoder};
+use jsonwebtoken::{Algorithm, Validation};
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() {
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.set_audience(&["your-audience"]);
+    validation.set_issuer(&["your-issuer"]);
+
+    let decoder = RemoteJwksDecoder::builder()
+        .jwks_url("https://your-auth-provider.com/.well-known/jwks.json".to_string())
+        .validation(validation)
+        .build()
+        .unwrap();
+    let decoder = Arc::new(decoder);
+
+    // Initialize: fetch keys immediately and start background refresh task
+    decoder.initialize().await.expect("Failed to initialize JWKS decoder");
+
+    let state = JwtDecoderState { decoder };
+    let app = Router::new()
+        .route("/protected", get(protected))
+        .with_state(state);
+}
+```
+
+The remote decoder:
+- Fetches JWKS on initialization
+- Automatically refreshes keys in the background (default: every hour)
+- Caches keys for fast lookup by `kid` (key ID)
+- Includes retry logic with configurable attempts and backoff
+
 ## Custom Token Extractors
 
 Extract tokens from custom headers or cookies:
