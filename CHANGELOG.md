@@ -11,11 +11,9 @@ All notable changes to this project will be documented in this file.
   - `BearerTokenExtractor` (default): Authorization: Bearer <token>
   - `HeaderTokenExtractor<C>`: Custom HTTP headers
   - `CookieTokenExtractor<C>`: Cookie-based tokens
-  - `QueryTokenExtractor<C>`: Query parameter tokens
 - Added convenience macros to reduce boilerplate:
   - `define_header_extractor!(Name, "header-name")`
   - `define_cookie_extractor!(Name, "cookie-name")`
-  - `define_query_extractor!(Name, "param-name")`
 
 ## [0.5.1] - 2025-04-03
 

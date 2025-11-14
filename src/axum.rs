@@ -75,10 +75,10 @@ impl TokenExtractor for BearerTokenExtractor {
 
 /// Provides configuration values for token extractors.
 ///
-/// Implement this trait to specify custom header names, cookie names, or query parameter names.
+/// Implement this trait to specify custom header names or cookie names
 /// Typically used with the `define_*_extractor!` macros rather than implemented manually.
 pub trait ExtractorConfig {
-    /// Returns the header name, cookie name, or query parameter name to extract from.
+    /// Returns the header name or cookie name to extract from.
     fn value() -> &'static str;
 }
 
@@ -127,31 +127,6 @@ macro_rules! define_cookie_extractor {
         impl $crate::ExtractorConfig for $name {
             fn value() -> &'static str {
                 $cookie
-            }
-        }
-    };
-}
-
-/// Creates a custom query parameter token extractor with the given name and parameter value.
-///
-/// # Examples
-///
-/// ```
-/// use axum_jwt_auth::define_query_extractor;
-///
-/// // Define a custom query extractor for "token"
-/// define_query_extractor!(TokenParam, "token");
-///
-/// // Now use it in your handlers:
-/// // async fn handler(user: Claims<MyClaims, QueryTokenExtractor<TokenParam>>) -> Response { ... }
-/// ```
-#[macro_export]
-macro_rules! define_query_extractor {
-    ($name:ident, $param:expr) => {
-        pub struct $name;
-        impl $crate::ExtractorConfig for $name {
-            fn value() -> &'static str {
-                $param
             }
         }
     };
@@ -211,39 +186,6 @@ impl<C: ExtractorConfig> TokenExtractor for CookieTokenExtractor<C> {
             .get(C::value())
             .map(|s| s.to_string())
             .ok_or(AuthError::MissingToken)
-    }
-}
-
-/// Extracts JWT tokens from a URL query parameter.
-///
-/// Use with the `define_query_extractor!` macro for convenience.
-///
-/// # Example
-///
-/// ```ignore
-/// define_query_extractor!(TokenParam, "token");
-///
-/// async fn handler(user: Claims<MyClaims, QueryTokenExtractor<TokenParam>>) {
-///     // Token extracted from the "?token=..." query parameter
-/// }
-/// ```
-pub struct QueryTokenExtractor<C: ExtractorConfig>(PhantomData<C>);
-
-#[async_trait]
-impl<C: ExtractorConfig> TokenExtractor for QueryTokenExtractor<C> {
-    async fn extract_token(parts: &mut Parts) -> Result<String, AuthError> {
-        let query_string = parts.uri.query().ok_or(AuthError::MissingToken)?;
-
-        // Parse query parameters manually
-        for pair in query_string.split('&') {
-            if let Some((key, value)) = pair.split_once('=') {
-                if key == C::value() {
-                    return Ok(value.to_string());
-                }
-            }
-        }
-
-        Err(AuthError::MissingToken)
     }
 }
 
@@ -409,12 +351,6 @@ mod tests {
     fn test_cookie_extractor_macro() {
         define_cookie_extractor!(TestCookie, "test_cookie");
         assert_eq!(TestCookie::value(), "test_cookie");
-    }
-
-    #[test]
-    fn test_query_extractor_macro() {
-        define_query_extractor!(TestQuery, "test_param");
-        assert_eq!(TestQuery::value(), "test_param");
     }
 
     // ============================================================================
@@ -787,145 +723,6 @@ mod tests {
         let token = AuthCookieExtractor::extract_token(&mut req.into_parts().0).await;
         assert!(token.is_ok());
         assert_eq!(token.unwrap(), "my_jwt_token");
-    }
-
-    // ============================================================================
-    // QueryTokenExtractor Tests
-    // ============================================================================
-
-    #[tokio::test]
-    async fn test_query_token_extractor_valid() {
-        define_query_extractor!(TokenParam, "token");
-        type TokenParamExtractor = QueryTokenExtractor<TokenParam>;
-
-        let req = Request::builder()
-            .uri("http://example.com/api?token=my_jwt_token&other=value")
-            .body(Body::empty())
-            .unwrap();
-
-        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
-        assert!(token.is_ok());
-        assert_eq!(token.unwrap(), "my_jwt_token");
-    }
-
-    #[tokio::test]
-    async fn test_query_token_extractor_single_param() {
-        define_query_extractor!(TokenParam2, "token");
-        type TokenParamExtractor = QueryTokenExtractor<TokenParam2>;
-
-        let req = Request::builder()
-            .uri("http://example.com/api?token=my_jwt_token")
-            .body(Body::empty())
-            .unwrap();
-
-        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
-        assert!(token.is_ok());
-        assert_eq!(token.unwrap(), "my_jwt_token");
-    }
-
-    #[tokio::test]
-    async fn test_query_token_extractor_missing_parameter() {
-        define_query_extractor!(TokenParam3, "token");
-        type TokenParamExtractor = QueryTokenExtractor<TokenParam3>;
-
-        let req = Request::builder()
-            .uri("http://example.com/api?other=value")
-            .body(Body::empty())
-            .unwrap();
-        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
-        assert!(token.is_err());
-        assert_eq!(token.unwrap_err(), AuthError::MissingToken);
-    }
-
-    #[tokio::test]
-    async fn test_query_token_extractor_no_query_string() {
-        define_query_extractor!(TokenParam4, "token");
-        type TokenParamExtractor = QueryTokenExtractor<TokenParam4>;
-
-        let req = Request::builder()
-            .uri("http://example.com/api")
-            .body(Body::empty())
-            .unwrap();
-        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
-        assert!(token.is_err());
-        assert_eq!(token.unwrap_err(), AuthError::MissingToken);
-    }
-
-    #[tokio::test]
-    async fn test_query_token_extractor_empty_value() {
-        define_query_extractor!(TokenParam5, "token");
-        type TokenParamExtractor = QueryTokenExtractor<TokenParam5>;
-
-        let req = Request::builder()
-            .uri("http://example.com/api?token=")
-            .body(Body::empty())
-            .unwrap();
-
-        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
-        assert!(token.is_ok());
-        assert_eq!(token.unwrap(), "");
-    }
-
-    #[tokio::test]
-    async fn test_query_token_extractor_multiple_params() {
-        define_query_extractor!(TokenParam6, "token");
-        type TokenParamExtractor = QueryTokenExtractor<TokenParam6>;
-
-        let req = Request::builder()
-            .uri("http://example.com/api?user=john&token=my_jwt&format=json")
-            .body(Body::empty())
-            .unwrap();
-
-        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
-        assert!(token.is_ok());
-        assert_eq!(token.unwrap(), "my_jwt");
-    }
-
-    #[tokio::test]
-    async fn test_query_token_extractor_url_encoded() {
-        define_query_extractor!(TokenParam7, "token");
-        type TokenParamExtractor = QueryTokenExtractor<TokenParam7>;
-
-        let req = Request::builder()
-            .uri("http://example.com/api?token=value%2Bwith%2Bplus")
-            .body(Body::empty())
-            .unwrap();
-
-        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
-        assert!(token.is_ok());
-        assert_eq!(token.unwrap(), "value%2Bwith%2Bplus");
-    }
-
-    #[tokio::test]
-    async fn test_query_token_extractor_partial_match() {
-        define_query_extractor!(TokenParam8, "token");
-        type TokenParamExtractor = QueryTokenExtractor<TokenParam8>;
-
-        // Should not match "refresh_token" when looking for "token"
-        let req = Request::builder()
-            .uri("http://example.com/api?refresh_token=my_jwt")
-            .body(Body::empty())
-            .unwrap();
-
-        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
-        assert!(token.is_err());
-        assert_eq!(token.unwrap_err(), AuthError::MissingToken);
-    }
-
-    #[tokio::test]
-    async fn test_query_token_extractor_first_occurrence() {
-        define_query_extractor!(TokenParam9, "token");
-        type TokenParamExtractor = QueryTokenExtractor<TokenParam9>;
-
-        // If token appears multiple times, should get the first one
-        let req = Request::builder()
-            .uri("http://example.com/api?token=first&other=value&token=second")
-            .body(Body::empty())
-            .unwrap();
-
-        let token = TokenParamExtractor::extract_token(&mut req.into_parts().0).await;
-        assert!(token.is_ok());
-        assert_eq!(token.unwrap(), "first");
     }
 
     // ============================================================================

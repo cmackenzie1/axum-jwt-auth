@@ -56,24 +56,22 @@ async fn main() {
 
 - **Local validation**: Validate JWTs with local RSA/HMAC keys
 - **Remote JWKS**: Automatic fetching, caching, and refresh of remote JWKS endpoints
-- **Flexible token extraction**: Bearer tokens (default), custom headers, cookies, or query parameters
+- **Flexible token extraction**: Bearer tokens (default), custom headers or cookies
 - **Type-safe claims**: Strongly-typed claims via generic extractors
 - **Axum integration**: Drop-in extractor for route handlers
 
 ## Custom Token Extractors
 
-Extract tokens from headers, cookies, or query parameters:
+Extract tokens from custom headers or cookies:
 
 ```rust
-use axum_jwt_auth::{define_header_extractor, define_cookie_extractor, define_query_extractor};
+use axum_jwt_auth::{define_header_extractor, define_cookie_extractor};
 
 define_header_extractor!(XAuthToken, "x-auth-token");
 define_cookie_extractor!(AuthCookie, "auth_token");
-define_query_extractor!(TokenParam, "token");
 
 async fn header_auth(user: Claims<MyClaims, HeaderTokenExtractor<XAuthToken>>) { }
 async fn cookie_auth(user: Claims<MyClaims, CookieTokenExtractor<AuthCookie>>) { }
-async fn query_auth(user: Claims<MyClaims, QueryTokenExtractor<TokenParam>>) { }
 ```
 
 ## Examples

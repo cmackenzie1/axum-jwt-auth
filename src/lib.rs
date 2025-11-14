@@ -5,7 +5,7 @@
 //! - Automatically fetch and cache remote JWKS endpoints
 //! - Integrate seamlessly with the Axum web framework
 //! - Handle token validation with configurable options
-//! - Extract tokens from multiple sources (headers, cookies, query parameters)
+//! - Extract tokens from multiple sources (headers or cookies)
 //!
 //! It builds on top of the `jsonwebtoken` crate to provide higher-level authentication primitives
 //! while maintaining full compatibility with standard JWT implementations.
@@ -35,13 +35,12 @@
 //! Use macros to easily define custom extractors:
 //!
 //! ```ignore
-//! use axum_jwt_auth::{define_header_extractor, define_cookie_extractor, define_query_extractor};
-//! use axum_jwt_auth::{Claims, HeaderTokenExtractor, CookieTokenExtractor, QueryTokenExtractor};
+//! use axum_jwt_auth::{define_header_extractor, define_cookie_extractor};
+//! use axum_jwt_auth::{Claims, HeaderTokenExtractor, CookieTokenExtractor};
 //!
 //! // Define custom extractors
 //! define_header_extractor!(XAuthToken, "x-auth-token");
 //! define_cookie_extractor!(AuthCookie, "auth_token");
-//! define_query_extractor!(TokenParam, "token");
 //!
 //! // Use in handlers
 //! async fn header_handler(user: Claims<MyClaims, HeaderTokenExtractor<XAuthToken>>) {
@@ -50,10 +49,6 @@
 //!
 //! async fn cookie_handler(user: Claims<MyClaims, CookieTokenExtractor<AuthCookie>>) {
 //!     // Token extracted from "auth_token" cookie
-//! }
-//!
-//! async fn query_handler(user: Claims<MyClaims, QueryTokenExtractor<TokenParam>>) {
-//!     // Token extracted from "?token=..." query parameter
 //! }
 //! ```
 //!
@@ -74,7 +69,7 @@ use thiserror::Error;
 
 pub use crate::axum::{
     AuthError, BearerTokenExtractor, Claims, CookieTokenExtractor, ExtractorConfig,
-    HeaderTokenExtractor, JwtDecoderState, QueryTokenExtractor, TokenExtractor,
+    HeaderTokenExtractor, JwtDecoderState, TokenExtractor,
 };
 pub use crate::local::LocalDecoder;
 pub use crate::remote::{
