@@ -4,7 +4,7 @@
 [![Crates.io Version](https://img.shields.io/crates/v/axum-jwt-auth)](https://crates.io/crates/axum-jwt-auth)
 [![docs.rs](https://img.shields.io/docsrs/axum-jwt-auth)](https://docs.rs/axum-jwt-auth)
 
-A Rust library providing JWT authentication middleware for Axum web applications. It supports both local and remote JWKS validation, handles token extraction and validation, and provides strongly-typed claims access in your request handlers. Built on top of jsonwebtoken, it offers a simple yet flexible API for securing your Axum routes with JWT authentication.
+JWT authentication middleware for Axum. Supports local keys and remote JWKS with automatic caching and refresh.
 
 ## Installation
 
@@ -12,27 +12,78 @@ A Rust library providing JWT authentication middleware for Axum web applications
 cargo add axum-jwt-auth
 ```
 
-## Usage
+## Quick Start
 
-See [examples](./examples/) for how to use the library. It includes a local and remote example.
+```rust
+use axum::{routing::get, Router};
+use axum_jwt_auth::{Claims, JwtDecoderState, LocalDecoder};
+use jsonwebtoken::{DecodingKey, Algorithm, Validation};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
-## Contributing
+#[derive(Serialize, Deserialize)]
+struct MyClaims {
+    sub: String,
+    exp: usize,
+}
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+async fn protected(user: Claims<MyClaims>) -> String {
+    format!("Hello, {}!", user.claims.sub)
+}
 
-Please make sure to update tests as appropriate.
+#[tokio::main]
+async fn main() {
+    let keys = vec![DecodingKey::from_secret(b"secret")];
+    let decoder = LocalDecoder::builder()
+        .keys(keys)
+        .validation(Validation::new(Algorithm::HS256))
+        .build()
+        .unwrap();
 
-### Useful commands
+    let state = JwtDecoderState {
+        decoder: Arc::new(decoder),
+    };
 
-```bash
-cargo fmt
-cargo clippy --all-features --all-targets
-# if you have nextest installed, you can run tests with:
-cargo nextest run --profile ci
-# otherwise regular cargo test will work
-cargo test
+    let app = Router::new()
+        .route("/protected", get(protected))
+        .with_state(state);
+
+    // Server will expect: Authorization: Bearer <jwt>
+}
 ```
+
+## Features
+
+- **Local validation**: Validate JWTs with local RSA/HMAC keys
+- **Remote JWKS**: Automatic fetching, caching, and refresh of remote JWKS endpoints
+- **Flexible token extraction**: Bearer tokens (default), custom headers, cookies, or query parameters
+- **Type-safe claims**: Strongly-typed claims via generic extractors
+- **Axum integration**: Drop-in extractor for route handlers
+
+## Custom Token Extractors
+
+Extract tokens from headers, cookies, or query parameters:
+
+```rust
+use axum_jwt_auth::{define_header_extractor, define_cookie_extractor, define_query_extractor};
+
+define_header_extractor!(XAuthToken, "x-auth-token");
+define_cookie_extractor!(AuthCookie, "auth_token");
+define_query_extractor!(TokenParam, "token");
+
+async fn header_auth(user: Claims<MyClaims, HeaderTokenExtractor<XAuthToken>>) { }
+async fn cookie_auth(user: Claims<MyClaims, CookieTokenExtractor<AuthCookie>>) { }
+async fn query_auth(user: Claims<MyClaims, QueryTokenExtractor<TokenParam>>) { }
+```
+
+## Examples
+
+See the [examples](./examples/) directory for complete working examples:
+
+- [**local**](./examples/local/) - Local RSA key validation
+- [**remote**](./examples/remote/) - Remote JWKS with caching and retry logic
+- [**cloudflare**](./examples/cloudflare/) - Cloudflare Access JWT validation
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT - see [LICENSE](LICENSE) for details.
