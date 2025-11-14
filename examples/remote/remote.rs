@@ -81,7 +81,7 @@ async fn main() {
     let decoder = Arc::new(decoder);
 
     // Initialize: fetch keys immediately and start background refresh task
-    decoder
+    let shutdown_token = decoder
         .initialize()
         .await
         .expect("Failed to initialize JWKS decoder");
@@ -136,6 +136,12 @@ async fn main() {
             .await
             .expect("Failed to read response")
     );
+
+    // Gracefully shutdown the background refresh task
+    shutdown_token.cancel();
+
+    // Give the shutdown a moment to complete
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Clean up our servers
     server_handle.abort();

@@ -120,7 +120,7 @@ async fn main() {
     let decoder = Arc::new(decoder);
 
     // Initialize: fetch keys immediately and start background refresh task
-    decoder
+    let _shutdown_token = decoder
         .initialize()
         .await
         .expect("Failed to initialize JWKS decoder");
