@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- [**breaking**] Refactored `Claims<T>` from tuple struct to named struct with public `claims` field for cleaner API
+- Added `TokenExtractor` trait for pluggable token extraction strategies
+- Added `ExtractorConfig` trait for configuring extractor parameters
+- Implemented four built-in extractors:
+  - `BearerTokenExtractor` (default): Authorization: Bearer <token>
+  - `HeaderTokenExtractor<C>`: Custom HTTP headers
+  - `CookieTokenExtractor<C>`: Cookie-based tokens
+  - `QueryTokenExtractor<C>`: Query parameter tokens
+- Added convenience macros to reduce boilerplate:
+  - `define_header_extractor!(Name, "header-name")`
+  - `define_cookie_extractor!(Name, "cookie-name")`
+  - `define_query_extractor!(Name, "param-name")`
+
 ## [0.5.1] - 2025-04-03
 
 ### 🚀 Features
