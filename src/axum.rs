@@ -1,14 +1,13 @@
 use std::marker::PhantomData;
 
-use async_trait::async_trait;
-use axum::extract::FromRef;
-use axum::http::{header::HeaderName, StatusCode};
-use axum::response::Response;
 use axum::RequestPartsExt;
+use axum::extract::FromRef;
+use axum::http::{StatusCode, header::HeaderName};
+use axum::response::Response;
 use axum::{http::request::Parts, response::IntoResponse};
+use axum_extra::TypedHeader;
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::{Authorization, Cookie};
-use axum_extra::TypedHeader;
 use jsonwebtoken::errors::ErrorKind;
 use serde::de::DeserializeOwned;
 
@@ -50,12 +49,13 @@ pub struct Claims<T, E = BearerTokenExtractor> {
 ///
 /// Implement this trait to define custom token extraction strategies.
 /// The library provides implementations for common sources via the extractor macros.
-#[async_trait]
-pub trait TokenExtractor {
+pub trait TokenExtractor: Send + Sync {
     /// Extracts a JWT token string from the request parts.
     ///
     /// Returns `AuthError::MissingToken` if the token cannot be found or extracted.
-    async fn extract_token(parts: &mut Parts) -> Result<String, AuthError>;
+    fn extract_token(
+        parts: &mut Parts,
+    ) -> impl std::future::Future<Output = Result<String, AuthError>> + Send;
 }
 
 /// Extracts JWT tokens from the `Authorization: Bearer <token>` header.
@@ -63,7 +63,6 @@ pub trait TokenExtractor {
 /// This is the default extractor used by `Claims<T>` when no extractor is specified.
 pub struct BearerTokenExtractor;
 
-#[async_trait]
 impl TokenExtractor for BearerTokenExtractor {
     async fn extract_token(parts: &mut Parts) -> Result<String, AuthError> {
         let auth: TypedHeader<Authorization<Bearer>> =
@@ -77,7 +76,7 @@ impl TokenExtractor for BearerTokenExtractor {
 ///
 /// Implement this trait to specify custom header names or cookie names
 /// Typically used with the `define_*_extractor!` macros rather than implemented manually.
-pub trait ExtractorConfig {
+pub trait ExtractorConfig: Send + Sync {
     /// Returns the header name or cookie name to extract from.
     fn value() -> &'static str;
 }
@@ -147,7 +146,6 @@ macro_rules! define_cookie_extractor {
 /// ```
 pub struct HeaderTokenExtractor<C: ExtractorConfig>(PhantomData<C>);
 
-#[async_trait]
 impl<C: ExtractorConfig> TokenExtractor for HeaderTokenExtractor<C> {
     async fn extract_token(parts: &mut Parts) -> Result<String, AuthError> {
         let header_name = HeaderName::from_static(C::value());
@@ -176,7 +174,6 @@ impl<C: ExtractorConfig> TokenExtractor for HeaderTokenExtractor<C> {
 /// ```
 pub struct CookieTokenExtractor<C: ExtractorConfig>(PhantomData<C>);
 
-#[async_trait]
 impl<C: ExtractorConfig> TokenExtractor for CookieTokenExtractor<C> {
     async fn extract_token(parts: &mut Parts) -> Result<String, AuthError> {
         let cookies: TypedHeader<Cookie> =

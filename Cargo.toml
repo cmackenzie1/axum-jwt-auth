@@ -1,14 +1,14 @@
 [package]
 name = "axum-jwt-auth"
 version = "0.6.0"
-edition = "2021"
+edition = "2024"
+rust-version = "1.85"
 authors = ["Cole MacKenzie"]
 description = "A simple JWT authentication middleware for Axum"
 license = "MIT"
 repository = "https://github.com/cmackenzie1/axum-jwt-auth"
 
 [dependencies]
-async-trait = "0.1"
 axum = { version = "0.8", features = ["macros"] }
 axum-extra = { version = "0.12", features = ["typed-header", "cookie"] }
 dashmap = "6.1.0"

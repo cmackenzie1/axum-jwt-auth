@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use axum::{
+    Json, Router,
     extract::FromRef,
     response::IntoResponse,
     routing::{get, post},
-    Json, Router,
 };
 
 use axum_jwt_auth::{
@@ -12,7 +12,7 @@ use axum_jwt_auth::{
     RemoteJwksDecoderConfig,
 };
 use chrono::{Duration, Utc};
-use jsonwebtoken::{encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation, encode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
