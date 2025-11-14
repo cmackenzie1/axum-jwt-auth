@@ -5,13 +5,61 @@
 //! - Automatically fetch and cache remote JWKS endpoints
 //! - Integrate seamlessly with the Axum web framework
 //! - Handle token validation with configurable options
+//! - Extract tokens from multiple sources (headers, cookies, query parameters)
 //!
 //! It builds on top of the `jsonwebtoken` crate to provide higher-level authentication primitives
 //! while maintaining full compatibility with standard JWT implementations.
 //!
-//! # Example
+//! # Quick Start
 //!
-//! For a full example, see the [examples](https://github.com/cmackenzie1/axum-jwt-auth/blob/main/examples).
+//! ## Using Bearer Tokens (Default)
+//!
+//! ```ignore
+//! use axum::{Router, routing::get, Json};
+//! use axum_jwt_auth::{Claims, LocalDecoder, JwtDecoderState};
+//! use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Deserialize, Serialize)]
+//! struct MyClaims {
+//!     sub: String,
+//!     exp: usize,
+//! }
+//!
+//! async fn protected_handler(user: Claims<MyClaims>) -> Json<MyClaims> {
+//!     Json(user.claims)
+//! }
+//! ```
+//!
+//! ## Custom Token Extractors
+//!
+//! Use macros to easily define custom extractors:
+//!
+//! ```ignore
+//! use axum_jwt_auth::{define_header_extractor, define_cookie_extractor, define_query_extractor};
+//! use axum_jwt_auth::{Claims, HeaderTokenExtractor, CookieTokenExtractor, QueryTokenExtractor};
+//!
+//! // Define custom extractors
+//! define_header_extractor!(XAuthToken, "x-auth-token");
+//! define_cookie_extractor!(AuthCookie, "auth_token");
+//! define_query_extractor!(TokenParam, "token");
+//!
+//! // Use in handlers
+//! async fn header_handler(user: Claims<MyClaims, HeaderTokenExtractor<XAuthToken>>) {
+//!     // Token extracted from "x-auth-token" header
+//! }
+//!
+//! async fn cookie_handler(user: Claims<MyClaims, CookieTokenExtractor<AuthCookie>>) {
+//!     // Token extracted from "auth_token" cookie
+//! }
+//!
+//! async fn query_handler(user: Claims<MyClaims, QueryTokenExtractor<TokenParam>>) {
+//!     // Token extracted from "?token=..." query parameter
+//! }
+//! ```
+//!
+//! # Examples
+//!
+//! For full examples, see the [examples directory](https://github.com/cmackenzie1/axum-jwt-auth/blob/main/examples).
 
 mod axum;
 mod local;
@@ -24,7 +72,10 @@ use jsonwebtoken::TokenData;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 
-pub use crate::axum::{AuthError, Claims, JwtDecoderState};
+pub use crate::axum::{
+    AuthError, BearerTokenExtractor, Claims, CookieTokenExtractor, ExtractorConfig,
+    HeaderTokenExtractor, JwtDecoderState, QueryTokenExtractor, TokenExtractor,
+};
 pub use crate::local::LocalDecoder;
 pub use crate::remote::{
     RemoteJwksDecoder, RemoteJwksDecoderBuilder, RemoteJwksDecoderConfig,

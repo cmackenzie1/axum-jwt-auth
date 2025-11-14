@@ -61,7 +61,7 @@ async fn local_decoder() {
         .route("/", get(|| async { "Hello, World!" }))
         .route(
             "/user_info",
-            get(|Claims(claims): Claims<CustomClaims>| async { Json(claims) }),
+            get(|user: Claims<CustomClaims>| async move { Json(user.claims) }),
         )
         .route(
             "/login",
