@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use dashmap::DashMap;
-use jsonwebtoken::{jwk::JwkSet, DecodingKey, TokenData, Validation};
+use jsonwebtoken::{DecodingKey, TokenData, Validation, jwk::JwkSet};
 use serde::de::DeserializeOwned;
 use tokio::sync::Notify;
 
@@ -340,26 +339,33 @@ impl Default for RemoteJwksDecoderBuilder {
     }
 }
 
-#[async_trait]
 impl<T> JwtDecoder<T> for RemoteJwksDecoder
 where
     T: for<'de> DeserializeOwned,
 {
-    async fn decode(&self, token: &str) -> Result<TokenData<T>, Error> {
-        self.ensure_initialized().await;
-        let header = jsonwebtoken::decode_header(token)?;
-        let target_kid = header.kid;
+    fn decode<'a>(
+        &'a self,
+        token: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<TokenData<T>, Error>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            self.ensure_initialized().await;
+            let header = jsonwebtoken::decode_header(token)?;
+            let target_kid = header.kid;
 
-        if let Some(ref kid) = target_kid {
-            if let Some(key) = self.keys_cache.get(kid) {
-                return Ok(jsonwebtoken::decode::<T>(
-                    token,
-                    key.value(),
-                    &self.validation,
-                )?);
+            if let Some(ref kid) = target_kid {
+                if let Some(key) = self.keys_cache.get(kid) {
+                    Ok(jsonwebtoken::decode::<T>(
+                        token,
+                        key.value(),
+                        &self.validation,
+                    )?)
+                } else {
+                    Err(Error::KeyNotFound(Some(kid.clone())))
+                }
+            } else {
+                Err(Error::KeyNotFound(None))
             }
-            return Err(Error::KeyNotFound(Some(kid.clone())));
-        }
-        return Err(Error::KeyNotFound(None));
+        })
     }
 }

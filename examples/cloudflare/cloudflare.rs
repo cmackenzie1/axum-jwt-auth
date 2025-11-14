@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use axum::{
+    Json, Router,
     extract::FromRef,
     response::{IntoResponse, Response},
     routing::get,
-    Json, Router,
 };
 use axum_jwt_auth::{
-    define_cookie_extractor, define_header_extractor, Claims, CookieTokenExtractor,
-    HeaderTokenExtractor, JwtDecoderState, RemoteJwksDecoder,
+    Claims, CookieTokenExtractor, HeaderTokenExtractor, JwtDecoderState, RemoteJwksDecoder,
+    define_cookie_extractor, define_header_extractor,
 };
 use jsonwebtoken::{Algorithm, Validation};
 use serde::{Deserialize, Serialize};

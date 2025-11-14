@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use jsonwebtoken::{DecodingKey, TokenData, Validation};
 use serde::de::DeserializeOwned;
 
@@ -105,25 +104,30 @@ impl LocalDecoderBuilder {
     }
 }
 
-#[async_trait]
 impl<T> JwtDecoder<T> for LocalDecoder
 where
     T: for<'de> DeserializeOwned,
 {
-    async fn decode(&self, token: &str) -> Result<TokenData<T>, Error> {
-        // Try to decode the token with each key in the cache
-        // If none of them work, return the error from the last one
-        let mut last_error: Option<Error> = None;
-        for key in self.keys.iter() {
-            match jsonwebtoken::decode::<T>(token, key, &self.validation) {
-                Ok(token_data) => return Ok(token_data),
-                Err(e) => {
-                    tracing::error!("Error decoding token: {}", e);
-                    last_error = Some(Error::Jwt(e));
+    fn decode<'a>(
+        &'a self,
+        token: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<TokenData<T>, Error>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            // Try to decode the token with each key in the cache
+            // If none of them work, return the error from the last one
+            let mut last_error: Option<Error> = None;
+            for key in self.keys.iter() {
+                match jsonwebtoken::decode::<T>(token, key, &self.validation) {
+                    Ok(token_data) => return Ok(token_data),
+                    Err(e) => {
+                        tracing::error!("Error decoding token: {}", e);
+                        last_error = Some(Error::Jwt(e));
+                    }
                 }
             }
-        }
 
-        Err(last_error.unwrap_or_else(|| Error::Configuration("No keys available".into())))
+            Err(last_error.unwrap_or_else(|| Error::Configuration("No keys available".into())))
+        })
     }
 }

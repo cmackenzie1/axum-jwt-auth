@@ -60,9 +60,10 @@ mod axum;
 mod local;
 mod remote;
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use jsonwebtoken::TokenData;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
@@ -110,8 +111,7 @@ pub enum Error {
 ///
 /// Implemented by [`LocalDecoder`] and [`RemoteJwksDecoder`] to provide
 /// a unified interface for JWT validation with different key sources.
-#[async_trait]
-pub trait JwtDecoder<T>
+pub trait JwtDecoder<T>: Send + Sync
 where
     T: for<'de> DeserializeOwned,
 {
@@ -121,7 +121,10 @@ where
     ///
     /// Returns an error if the token is invalid, expired, has an invalid signature,
     /// or if the key cannot be found (for remote decoders).
-    async fn decode(&self, token: &str) -> Result<TokenData<T>, Error>;
+    fn decode<'a>(
+        &'a self,
+        token: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<TokenData<T>, Error>> + Send + 'a>>;
 }
 
 /// Type alias for a thread-safe, trait-object decoder suitable for Axum state.

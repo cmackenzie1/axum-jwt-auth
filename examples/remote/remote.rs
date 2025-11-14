@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use axum::{extract::FromRef, routing::get, Json, Router};
+use axum::{Json, Router, extract::FromRef, routing::get};
 use axum_jwt_auth::{Claims, JwtDecoderState, RemoteJwksDecoder};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct CustomClaims {
