@@ -14,54 +14,53 @@ use serde::de::DeserializeOwned;
 
 use crate::Decoder;
 
-/// A generic struct for holding the claims of a JWT token.
+/// Axum extractor for validated JWT claims.
 ///
-/// The type parameter `E` specifies the token extraction strategy.
-/// By default, it uses `BearerTokenExtractor` to extract tokens from
-/// the `Authorization: Bearer <token>` header.
+/// Extracts and validates JWT tokens from HTTP requests. The generic parameter `T` represents
+/// your claims type, and `E` specifies the token extraction strategy (defaults to `BearerTokenExtractor`).
 ///
 /// # Examples
 ///
 /// ```ignore
-/// // Default: Bearer token extraction
-/// async fn handler(user: Claims<MyClaims>) -> Response {
-///     Json(user.claims).into_response()
+/// // Default: Extract from Authorization: Bearer <token>
+/// async fn handler(user: Claims<MyClaims>) -> Json<MyClaims> {
+///     Json(user.claims)
 /// }
 ///
-/// // Custom header extraction
-/// struct XAuthToken;
-/// impl ExtractorConfig for XAuthToken {
-///     fn value() -> &'static str { "x-auth-token" }
-/// }
-/// async fn handler(user: Claims<MyClaims, HeaderTokenExtractor<XAuthToken>>) -> Response {
-///     Json(user.claims).into_response()
+/// // Extract from custom header
+/// define_header_extractor!(XAuthToken, "x-auth-token");
+/// async fn handler(user: Claims<MyClaims, HeaderTokenExtractor<XAuthToken>>) {
+///     // ...
 /// }
 ///
-/// // Cookie extraction
-/// struct AuthCookie;
-/// impl ExtractorConfig for AuthCookie {
-///     fn value() -> &'static str { "auth_token" }
-/// }
-/// async fn handler(user: Claims<MyClaims, CookieTokenExtractor<AuthCookie>>) -> Response {
-///     Json(user.claims).into_response()
+/// // Extract from cookie
+/// define_cookie_extractor!(AuthCookie, "auth_token");
+/// async fn handler(user: Claims<MyClaims, CookieTokenExtractor<AuthCookie>>) {
+///     // ...
 /// }
 /// ```
 #[derive(Debug)]
 pub struct Claims<T, E = BearerTokenExtractor> {
-    /// The JWT claims payload
+    /// The validated JWT claims payload
     pub claims: T,
     _extractor: PhantomData<E>,
 }
 
-/// Trait for extracting tokens from request parts
+/// Trait for extracting JWT tokens from HTTP requests.
+///
+/// Implement this trait to define custom token extraction strategies.
+/// The library provides implementations for common sources via the extractor macros.
 #[async_trait]
 pub trait TokenExtractor {
+    /// Extracts a JWT token string from the request parts.
+    ///
+    /// Returns `AuthError::MissingToken` if the token cannot be found or extracted.
     async fn extract_token(parts: &mut Parts) -> Result<String, AuthError>;
 }
 
 /// Extracts JWT tokens from the `Authorization: Bearer <token>` header.
 ///
-/// This is the default token extractor.
+/// This is the default extractor used by `Claims<T>` when no extractor is specified.
 pub struct BearerTokenExtractor;
 
 #[async_trait]
@@ -74,12 +73,12 @@ impl TokenExtractor for BearerTokenExtractor {
     }
 }
 
-/// Trait for providing configuration to token extractors.
+/// Provides configuration values for token extractors.
 ///
-/// This trait allows users to define custom header names, cookie names, or query parameters
-/// for token extraction.
+/// Implement this trait to specify custom header names, cookie names, or query parameter names.
+/// Typically used with the `define_*_extractor!` macros rather than implemented manually.
 pub trait ExtractorConfig {
-    /// Returns the configuration value (header name, cookie name, or query parameter name)
+    /// Returns the header name, cookie name, or query parameter name to extract from.
     fn value() -> &'static str;
 }
 
@@ -160,18 +159,15 @@ macro_rules! define_query_extractor {
 
 /// Extracts JWT tokens from a custom HTTP header.
 ///
-/// # Examples
+/// Use with the `define_header_extractor!` macro for convenience.
+///
+/// # Example
 ///
 /// ```ignore
-/// // Define a configuration for the header name
-/// struct XAuthToken;
-/// impl ExtractorConfig for XAuthToken {
-///     fn value() -> &'static str { "x-auth-token" }
-/// }
+/// define_header_extractor!(XAuthToken, "x-auth-token");
 ///
-/// // Use it in your handler
-/// async fn handler(Claims(claims): Claims<MyClaims, HeaderTokenExtractor<XAuthToken>>) -> Response {
-///     // ...
+/// async fn handler(user: Claims<MyClaims, HeaderTokenExtractor<XAuthToken>>) {
+///     // Token extracted from the "x-auth-token" header
 /// }
 /// ```
 pub struct HeaderTokenExtractor<C: ExtractorConfig>(PhantomData<C>);
@@ -190,20 +186,17 @@ impl<C: ExtractorConfig> TokenExtractor for HeaderTokenExtractor<C> {
     }
 }
 
-/// Extracts JWT tokens from a cookie.
+/// Extracts JWT tokens from an HTTP cookie.
 ///
-/// # Examples
+/// Use with the `define_cookie_extractor!` macro for convenience.
+///
+/// # Example
 ///
 /// ```ignore
-/// // Define a configuration for the cookie name
-/// struct AuthTokenCookie;
-/// impl ExtractorConfig for AuthTokenCookie {
-///     fn value() -> &'static str { "auth_token" }
-/// }
+/// define_cookie_extractor!(AuthCookie, "auth_token");
 ///
-/// // Use it in your handler
-/// async fn handler(Claims(claims): Claims<MyClaims, CookieTokenExtractor<AuthTokenCookie>>) -> Response {
-///     // ...
+/// async fn handler(user: Claims<MyClaims, CookieTokenExtractor<AuthCookie>>) {
+///     // Token extracted from the "auth_token" cookie
 /// }
 /// ```
 pub struct CookieTokenExtractor<C: ExtractorConfig>(PhantomData<C>);
@@ -221,20 +214,17 @@ impl<C: ExtractorConfig> TokenExtractor for CookieTokenExtractor<C> {
     }
 }
 
-/// Extracts JWT tokens from a query parameter.
+/// Extracts JWT tokens from a URL query parameter.
 ///
-/// # Examples
+/// Use with the `define_query_extractor!` macro for convenience.
+///
+/// # Example
 ///
 /// ```ignore
-/// // Define a configuration for the query parameter name
-/// struct TokenParam;
-/// impl ExtractorConfig for TokenParam {
-///     fn value() -> &'static str { "token" }
-/// }
+/// define_query_extractor!(TokenParam, "token");
 ///
-/// // Use it in your handler
-/// async fn handler(Claims(claims): Claims<MyClaims, QueryTokenExtractor<TokenParam>>) -> Response {
-///     // ...
+/// async fn handler(user: Claims<MyClaims, QueryTokenExtractor<TokenParam>>) {
+///     // Token extracted from the "?token=..." query parameter
 /// }
 /// ```
 pub struct QueryTokenExtractor<C: ExtractorConfig>(PhantomData<C>);
@@ -306,60 +296,56 @@ fn map_jwt_error(err: crate::Error) -> AuthError {
     }
 }
 
-/// An enum representing the possible errors that can occur when authenticating a request.
-/// These are sourced from the `jsonwebtoken` crate and defined here to implement `IntoResponse` for
-/// use in the `axum` framework.
+/// Authentication errors that can occur during JWT extraction and validation.
+///
+/// These errors are returned by the `Claims` extractor and mapped to appropriate HTTP responses.
 #[derive(Debug, PartialEq, thiserror::Error)]
 pub enum AuthError {
-    /// When the token is invalid
+    /// The JWT token format is invalid or malformed.
     #[error("Invalid token")]
     InvalidToken,
 
-    /// When the signature is invalid
+    /// The JWT signature verification failed.
     #[error("Invalid signature")]
     InvalidSignature,
 
-    // Validation errors
-    /// When a claim required by the validation is not present
+    /// A required JWT claim is missing from the token.
     #[error("Missing required claim: {0}")]
     MissingRequiredClaim(String),
 
-    /// When a token's `exp` claim indicates that it has expired
+    /// The token's `exp` claim indicates it has expired.
     #[error("Expired signature")]
     ExpiredSignature,
 
-    /// When a token's `iss` claim does not match the expected issuer
+    /// The token's `iss` claim does not match the expected issuer.
     #[error("Invalid issuer")]
     InvalidIssuer,
 
-    /// When a token's `aud` claim does not match one of the expected audience values
+    /// The token's `aud` claim does not match the expected audience.
     #[error("Invalid audience")]
     InvalidAudience,
 
-    /// When a token's `sub` claim does not match one of the expected subject values
+    /// The token's `sub` claim does not match the expected subject.
     #[error("Invalid subject")]
     InvalidSubject,
 
-    /// When a token's `nbf` claim represents a time in the future
+    /// The token's `nbf` claim indicates it is not yet valid.
     #[error("Immature signature")]
     ImmatureSignature,
 
-    /// When the algorithm in the header doesn't match the one passed to `decode` or the encoding/decoding key
-    /// used doesn't match the alg requested
+    /// The algorithm specified in the token header is not allowed.
     #[error("Invalid algorithm")]
     InvalidAlgorithm,
 
-    /// When the Validation struct does not contain at least 1 algorithm
+    /// No validation algorithms were configured.
     #[error("Missing algorithm")]
     MissingAlgorithm,
 
-    /// When the request is missing a token
+    /// No JWT token was found in the request.
     #[error("Missing token")]
     MissingToken,
 
-    /// When an internal error occurs that doesn't fit into the other categories.
-    /// This is a catch-all error for any unexpected errors that occur such as
-    /// network errors, decoding errors, and cryptographic errors.
+    /// An unexpected internal error occurred (network, decoding, or cryptographic errors).
     #[error("Internal error")]
     InternalError,
 }
@@ -387,8 +373,12 @@ impl IntoResponse for AuthError {
     }
 }
 
+/// Wrapper for JWT decoders to be used as Axum application state.
+///
+/// Use this with `FromRef` to extract the decoder in handlers that require `Claims<T>`.
 #[derive(Clone)]
 pub struct JwtDecoderState<T> {
+    /// The JWT decoder instance (typically `Arc<LocalDecoder>` or `Arc<RemoteJwksDecoder>`)
     pub decoder: Decoder<T>,
 }
 
