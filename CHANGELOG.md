@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [0.6.0] - 2025-11-14
 
 - [**breaking**] Refactored `Claims<T>` from tuple struct to named struct with public `claims` field for cleaner API
 - Added `TokenExtractor` trait for pluggable token extraction strategies
