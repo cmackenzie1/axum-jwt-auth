@@ -41,3 +41,7 @@ path = "examples/local/local.rs"
 [[example]]
 name = "remote"
 path = "examples/remote/remote.rs"
+
+[[example]]
+name = "cloudflare"
+path = "examples/cloudflare/cloudflare.rs"
