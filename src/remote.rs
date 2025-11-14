@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use dashmap::DashMap;
-use derive_builder::Builder;
 use jsonwebtoken::{jwk::JwkSet, DecodingKey, TokenData, Validation};
 use serde::de::DeserializeOwned;
 use tokio::sync::Notify;
@@ -14,16 +13,13 @@ const DEFAULT_RETRY_COUNT: usize = 3; // 3 attempts
 const DEFAULT_BACKOFF: std::time::Duration = std::time::Duration::from_secs(1); // 1 second
 
 /// Configuration for remote JWKS fetching and caching behavior.
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone)]
 pub struct RemoteJwksDecoderConfig {
     /// Duration to cache JWKS keys before refreshing (default: 1 hour)
-    #[builder(default = "DEFAULT_CACHE_DURATION")]
     pub cache_duration: std::time::Duration,
     /// Number of retry attempts when fetching JWKS fails (default: 3)
-    #[builder(default = "DEFAULT_RETRY_COUNT")]
     pub retry_count: usize,
     /// Delay between retry attempts (default: 1 second)
-    #[builder(default = "DEFAULT_BACKOFF")]
     pub backoff: std::time::Duration,
 }
 
@@ -40,7 +36,47 @@ impl Default for RemoteJwksDecoderConfig {
 impl RemoteJwksDecoderConfig {
     /// Creates a new builder for configuring JWKS fetching behavior.
     pub fn builder() -> RemoteJwksDecoderConfigBuilder {
-        RemoteJwksDecoderConfigBuilder::default()
+        RemoteJwksDecoderConfigBuilder {
+            cache_duration: None,
+            retry_count: None,
+            backoff: None,
+        }
+    }
+}
+
+/// Builder for `RemoteJwksDecoderConfig`.
+pub struct RemoteJwksDecoderConfigBuilder {
+    cache_duration: Option<std::time::Duration>,
+    retry_count: Option<usize>,
+    backoff: Option<std::time::Duration>,
+}
+
+impl RemoteJwksDecoderConfigBuilder {
+    /// Sets the cache duration.
+    pub fn cache_duration(mut self, cache_duration: std::time::Duration) -> Self {
+        self.cache_duration = Some(cache_duration);
+        self
+    }
+
+    /// Sets the retry count.
+    pub fn retry_count(mut self, retry_count: usize) -> Self {
+        self.retry_count = Some(retry_count);
+        self
+    }
+
+    /// Sets the backoff duration.
+    pub fn backoff(mut self, backoff: std::time::Duration) -> Self {
+        self.backoff = Some(backoff);
+        self
+    }
+
+    /// Builds the `RemoteJwksDecoderConfig` with defaults for unset fields.
+    pub fn build(self) -> RemoteJwksDecoderConfig {
+        RemoteJwksDecoderConfig {
+            cache_duration: self.cache_duration.unwrap_or(DEFAULT_CACHE_DURATION),
+            retry_count: self.retry_count.unwrap_or(DEFAULT_RETRY_COUNT),
+            backoff: self.backoff.unwrap_or(DEFAULT_BACKOFF),
+        }
     }
 }
 
@@ -67,23 +103,19 @@ impl RemoteJwksDecoderConfig {
 ///     decoder_clone.refresh_keys_periodically().await;
 /// });
 /// ```
-#[derive(Clone, Builder)]
+#[derive(Clone)]
 pub struct RemoteJwksDecoder {
     /// The JWKS endpoint URL
     jwks_url: String,
     /// Configuration for caching and retry behavior
-    #[builder(default = "RemoteJwksDecoderConfig::default()")]
     config: RemoteJwksDecoderConfig,
     /// Thread-safe cache mapping key IDs to decoding keys
-    #[builder(default = "Arc::new(DashMap::new())")]
     keys_cache: Arc<DashMap<String, DecodingKey>>,
     /// JWT validation settings
     validation: Validation,
     /// HTTP client for fetching JWKS
-    #[builder(default = "reqwest::Client::new()")]
     client: reqwest::Client,
     /// Notification for initialization completion
-    #[builder(default = "Arc::new(Notify::new())")]
     initialized: Arc<Notify>,
 }
 
@@ -94,15 +126,12 @@ impl RemoteJwksDecoder {
     ///
     /// Returns `Error::Configuration` if the builder fails to construct the decoder.
     pub fn new(jwks_url: String) -> Result<Self, Error> {
-        RemoteJwksDecoderBuilder::default()
-            .jwks_url(jwks_url)
-            .build()
-            .map_err(|e| Error::Configuration(e.to_string()))
+        RemoteJwksDecoderBuilder::new().jwks_url(jwks_url).build()
     }
 
     /// Creates a new builder for configuring a remote JWKS decoder.
     pub fn builder() -> RemoteJwksDecoderBuilder {
-        RemoteJwksDecoderBuilder::default()
+        RemoteJwksDecoderBuilder::new()
     }
 
     /// Refreshes the JWKS cache with retry logic.
@@ -218,6 +247,96 @@ impl RemoteJwksDecoder {
         // If direct initialization failed, fall back to waiting for the background task
         tracing::trace!("Waiting for background initialization to complete");
         self.initialized.notified().await;
+    }
+}
+
+/// Builder for `RemoteJwksDecoder`.
+pub struct RemoteJwksDecoderBuilder {
+    jwks_url: Option<String>,
+    config: Option<RemoteJwksDecoderConfig>,
+    keys_cache: Option<Arc<DashMap<String, DecodingKey>>>,
+    validation: Option<Validation>,
+    client: Option<reqwest::Client>,
+    initialized: Option<Arc<Notify>>,
+}
+
+impl RemoteJwksDecoderBuilder {
+    /// Creates a new `RemoteJwksDecoderBuilder`.
+    pub fn new() -> Self {
+        Self {
+            jwks_url: None,
+            config: None,
+            keys_cache: None,
+            validation: None,
+            client: None,
+            initialized: None,
+        }
+    }
+
+    /// Sets the JWKS URL.
+    pub fn jwks_url(mut self, jwks_url: String) -> Self {
+        self.jwks_url = Some(jwks_url);
+        self
+    }
+
+    /// Sets the configuration.
+    pub fn config(mut self, config: RemoteJwksDecoderConfig) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    /// Sets the keys cache.
+    pub fn keys_cache(mut self, keys_cache: Arc<DashMap<String, DecodingKey>>) -> Self {
+        self.keys_cache = Some(keys_cache);
+        self
+    }
+
+    /// Sets the validation settings.
+    pub fn validation(mut self, validation: Validation) -> Self {
+        self.validation = Some(validation);
+        self
+    }
+
+    /// Sets the HTTP client.
+    pub fn client(mut self, client: reqwest::Client) -> Self {
+        self.client = Some(client);
+        self
+    }
+
+    /// Sets the initialized notifier.
+    pub fn initialized(mut self, initialized: Arc<Notify>) -> Self {
+        self.initialized = Some(initialized);
+        self
+    }
+
+    /// Builds the `RemoteJwksDecoder`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::Configuration` if required fields are missing.
+    pub fn build(self) -> Result<RemoteJwksDecoder, Error> {
+        let jwks_url = self
+            .jwks_url
+            .ok_or_else(|| Error::Configuration("jwks_url is required".into()))?;
+
+        let validation = self
+            .validation
+            .ok_or_else(|| Error::Configuration("validation is required".into()))?;
+
+        Ok(RemoteJwksDecoder {
+            jwks_url,
+            config: self.config.unwrap_or_default(),
+            keys_cache: self.keys_cache.unwrap_or_else(|| Arc::new(DashMap::new())),
+            validation,
+            client: self.client.unwrap_or_default(),
+            initialized: self.initialized.unwrap_or_else(|| Arc::new(Notify::new())),
+        })
+    }
+}
+
+impl Default for RemoteJwksDecoderBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
