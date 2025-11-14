@@ -3,6 +3,7 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use jsonwebtoken::{DecodingKey, TokenData, Validation, jwk::JwkSet};
 use serde::de::DeserializeOwned;
+use tokio_util::sync::CancellationToken;
 
 use crate::{Error, JwtDecoder};
 
@@ -133,6 +134,8 @@ impl RemoteJwksDecoder {
     /// 1. Immediately fetch keys from the JWKS endpoint
     /// 2. Spawn a background task to periodically refresh keys
     ///
+    /// Returns a `CancellationToken` that can be used to gracefully stop the background refresh task.
+    ///
     /// # Errors
     ///
     /// Returns an error if the initial fetch fails after all retry attempts.
@@ -145,20 +148,27 @@ impl RemoteJwksDecoder {
     ///     .validation(Validation::new(Algorithm::RS256))
     ///     .build()?;
     ///
-    /// // Fetch keys and start background refresh - that's it!
-    /// decoder.initialize().await?;
+    /// // Fetch keys and start background refresh
+    /// let shutdown_token = decoder.initialize().await?;
+    ///
+    /// // Later, during application shutdown:
+    /// shutdown_token.cancel();
     /// ```
-    pub async fn initialize(&self) -> Result<(), Error> {
+    pub async fn initialize(&self) -> Result<CancellationToken, Error> {
         // Fetch keys immediately
         self.refresh_keys().await?;
 
+        // Create cancellation token for graceful shutdown
+        let shutdown_token = CancellationToken::new();
+
         // Spawn background refresh task
         let decoder_clone = self.clone();
+        let token_clone = shutdown_token.clone();
         tokio::spawn(async move {
-            decoder_clone.refresh_keys_periodically().await;
+            decoder_clone.refresh_keys_periodically(token_clone).await;
         });
 
-        Ok(())
+        Ok(shutdown_token)
     }
 
     /// Manually triggers a JWKS refresh with retry logic.
@@ -231,40 +241,57 @@ impl RemoteJwksDecoder {
         Ok(())
     }
 
-    /// Runs an infinite loop that periodically refreshes the JWKS cache.
+    /// Runs a loop that periodically refreshes the JWKS cache until cancelled.
     ///
-    /// This method never returns and should be spawned in a background task using `tokio::spawn`.
+    /// This method should be spawned in a background task using `tokio::spawn`.
     /// Refresh failures are logged, and the decoder continues using stale keys until the next
     /// successful refresh.
+    ///
+    /// The loop will exit gracefully when the `shutdown_token` is cancelled.
     ///
     /// # Example
     ///
     /// ```ignore
+    /// use tokio_util::sync::CancellationToken;
+    ///
     /// let decoder = RemoteJwksDecoder::builder()
     ///     .jwks_url("https://example.com/.well-known/jwks.json".to_string())
     ///     .build()
     ///     .unwrap();
     ///
+    /// let shutdown_token = CancellationToken::new();
     /// let decoder_clone = decoder.clone();
+    /// let token_clone = shutdown_token.clone();
+    ///
     /// tokio::spawn(async move {
-    ///     decoder_clone.refresh_keys_periodically().await;
+    ///     decoder_clone.refresh_keys_periodically(token_clone).await;
     /// });
+    ///
+    /// // Later, to stop the refresh task:
+    /// shutdown_token.cancel();
     /// ```
-    pub async fn refresh_keys_periodically(&self) {
+    pub async fn refresh_keys_periodically(&self, shutdown_token: CancellationToken) {
         loop {
-            tracing::info!("Refreshing JWKS");
-            match self.refresh_keys().await {
-                Ok(_) => {}
-                Err(err) => {
-                    // log the error and continue with stale keys
-                    tracing::error!(
-                        "Failed to refresh JWKS after {} attempts: {:?}",
-                        self.config.retry_count,
-                        err
-                    );
+            tokio::select! {
+                _ = shutdown_token.cancelled() => {
+                    tracing::info!("JWKS refresh task shutting down gracefully");
+                    break;
+                }
+                _ = tokio::time::sleep(self.config.cache_duration) => {
+                    tracing::info!("Refreshing JWKS");
+                    match self.refresh_keys().await {
+                        Ok(_) => {}
+                        Err(err) => {
+                            // log the error and continue with stale keys
+                            tracing::error!(
+                                "Failed to refresh JWKS after {} attempts: {:?}",
+                                self.config.retry_count,
+                                err
+                            );
+                        }
+                    }
                 }
             }
-            tokio::time::sleep(self.config.cache_duration).await;
         }
     }
 

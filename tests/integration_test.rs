@@ -170,7 +170,7 @@ async fn remote_decoder() {
         .expect("Failed to build decoder");
 
     // Initialize: fetch keys and start background refresh
-    decoder
+    let shutdown_token = decoder
         .initialize()
         .await
         .expect("Failed to initialize decoder");
@@ -220,8 +220,8 @@ async fn remote_decoder() {
     assert!(expired_result.is_err());
 
     // Clean up
+    shutdown_token.cancel();
     server_handle.abort();
-    // Background refresh task is automatically managed
 }
 
 #[tokio::test]
@@ -275,7 +275,7 @@ async fn test_remote_decoder_initialization() {
 
     // Initialize with the delayed server - this will take 2 seconds
     let start = std::time::Instant::now();
-    decoder
+    let shutdown_token = decoder
         .initialize()
         .await
         .expect("Failed to initialize decoder");
@@ -325,5 +325,6 @@ async fn test_remote_decoder_initialization() {
     assert!(max_diff.as_millis() < 50, "Tasks completed too far apart");
 
     // Clean up
+    shutdown_token.cancel();
     server_handle.abort();
 }

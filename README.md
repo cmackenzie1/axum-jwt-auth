@@ -83,12 +83,15 @@ async fn main() {
     let decoder = Arc::new(decoder);
 
     // Initialize: fetch keys immediately and start background refresh task
-    decoder.initialize().await.expect("Failed to initialize JWKS decoder");
+    let shutdown_token = decoder.initialize().await.expect("Failed to initialize JWKS decoder");
 
     let state = JwtDecoderState { decoder };
     let app = Router::new()
         .route("/protected", get(protected))
         .with_state(state);
+
+    // Later, during application shutdown:
+    shutdown_token.cancel();
 }
 ```
 
@@ -97,6 +100,7 @@ The remote decoder:
 - Automatically refreshes keys in the background (default: every hour)
 - Caches keys for fast lookup by `kid` (key ID)
 - Includes retry logic with configurable attempts and backoff
+- Supports graceful shutdown via `CancellationToken`
 
 ## Custom Token Extractors
 
