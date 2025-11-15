@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{Json, Router, extract::FromRef, routing::get};
-use axum_jwt_auth::{Claims, JwtDecoderState, RemoteJwksDecoder};
+use axum_jwt_auth::{Claims, Decoder, RemoteJwksDecoder};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -46,7 +46,7 @@ async fn protected_route(user: Claims<CustomClaims>) -> Json<CustomClaims> {
 /// This is a state struct that holds the JWT decoder
 #[derive(Clone, FromRef)]
 struct AppState {
-    decoder: JwtDecoderState<CustomClaims>,
+    decoder: Decoder<CustomClaims>,
 }
 
 #[tokio::main]
@@ -90,9 +90,7 @@ async fn main() {
     let app_server = Router::new()
         .route("/protected", get(protected_route))
         .with_state(AppState {
-            decoder: JwtDecoderState {
-                decoder: decoder.clone(),
-            },
+            decoder: decoder.clone(),
         });
 
     // Start the app server

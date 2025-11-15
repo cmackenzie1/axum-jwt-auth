@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use axum_jwt_auth::{Claims, JwtDecoderState, LocalDecoder};
+use axum_jwt_auth::{Claims, Decoder, LocalDecoder};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, encode};
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,7 @@ pub struct MyClaims {
 
 #[derive(Clone, FromRef)]
 struct AppState {
-    decoder: JwtDecoderState<MyClaims>,
+    decoder: Decoder<MyClaims>,
 }
 
 async fn index() -> Response {
@@ -62,9 +62,7 @@ async fn main() {
         .build()
         .unwrap();
     let state = AppState {
-        decoder: JwtDecoderState {
-            decoder: Arc::new(decoder),
-        },
+        decoder: Arc::new(decoder),
     };
 
     let app = Router::new()

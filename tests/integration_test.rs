@@ -8,8 +8,7 @@ use axum::{
 };
 
 use axum_jwt_auth::{
-    Claims, Decoder, JwtDecoder, JwtDecoderState, LocalDecoder, RemoteJwksDecoder,
-    RemoteJwksDecoderConfig,
+    Claims, Decoder, JwtDecoder, LocalDecoder, RemoteJwksDecoder, RemoteJwksDecoderConfig,
 };
 use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation, encode};
@@ -18,7 +17,7 @@ use serde_json::json;
 
 #[derive(Clone, FromRef)]
 struct AppState {
-    decoder: JwtDecoderState<CustomClaims>,
+    decoder: Decoder<CustomClaims>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -53,9 +52,7 @@ async fn local_decoder() {
             .build()
             .unwrap(),
     );
-    let state = AppState {
-        decoder: JwtDecoderState { decoder },
-    };
+    let state = AppState { decoder };
 
     let app = Router::new()
         .route("/", get(|| async { "Hello, World!" }))
