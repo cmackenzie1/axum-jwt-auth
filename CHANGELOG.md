@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.2] - 2025-11-15
+
+### 🚀 Features
+
+- **Simplified state integration**: Removed `JwtDecoderState` wrapper to eliminate double nesting in Axum state
+
+### 💥 Breaking Changes
+
+- **State configuration**: `JwtDecoderState<T>` has been removed. Use `Decoder<T>` directly in your application state.
+
+**Before:**
+```rust
+use axum_jwt_auth::{JwtDecoderState, Decoder};
+
+#[derive(Clone, FromRef)]
+struct AppState {
+    decoder: JwtDecoderState<MyClaims>,
+}
+
+let state = AppState {
+    decoder: JwtDecoderState {
+        decoder: Arc::new(decoder),
+    },
+};
+```
+
+**After:**
+```rust
+use axum_jwt_auth::Decoder;
+
+#[derive(Clone, FromRef)]
+struct AppState {
+    decoder: Decoder<MyClaims>,
+}
+
+let state = AppState {
+    decoder: Arc::new(decoder),
+};
+```
+
 ## [0.6.1] - 2025-11-14
 
 ### 🚀 Features

@@ -15,8 +15,9 @@
 //! ## Using Bearer Tokens (Default)
 //!
 //! ```ignore
-//! use axum::{Router, routing::get, Json};
-//! use axum_jwt_auth::{Claims, LocalDecoder, JwtDecoderState};
+//! use std::sync::Arc;
+//! use axum::{Router, routing::get, Json, extract::FromRef};
+//! use axum_jwt_auth::{Claims, Decoder, LocalDecoder};
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Deserialize, Serialize)]
@@ -25,9 +26,28 @@
 //!     exp: usize,
 //! }
 //!
+//! #[derive(Clone, FromRef)]
+//! struct AppState {
+//!     decoder: Decoder<MyClaims>,
+//! }
+//!
 //! async fn protected_handler(user: Claims<MyClaims>) -> Json<MyClaims> {
 //!     Json(user.claims)
 //! }
+//!
+//! let decoder = LocalDecoder::builder()
+//!     .keys(keys)
+//!     .validation(validation)
+//!     .build()
+//!     .unwrap();
+//!
+//! let state = AppState {
+//!     decoder: Arc::new(decoder),
+//! };
+//!
+//! let app = Router::new()
+//!     .route("/protected", get(protected_handler))
+//!     .with_state(state);
 //! ```
 //!
 //! ## Custom Token Extractors
@@ -70,7 +90,7 @@ use thiserror::Error;
 
 pub use crate::axum::{
     AuthError, BearerTokenExtractor, Claims, CookieTokenExtractor, ExtractorConfig,
-    HeaderTokenExtractor, JwtDecoderState, TokenExtractor,
+    HeaderTokenExtractor, TokenExtractor,
 };
 pub use crate::local::LocalDecoder;
 pub use crate::remote::{

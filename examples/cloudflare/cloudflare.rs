@@ -7,7 +7,7 @@ use axum::{
     routing::get,
 };
 use axum_jwt_auth::{
-    Claims, CookieTokenExtractor, HeaderTokenExtractor, JwtDecoderState, RemoteJwksDecoder,
+    Claims, CookieTokenExtractor, Decoder, HeaderTokenExtractor, RemoteJwksDecoder,
     define_cookie_extractor, define_header_extractor,
 };
 use jsonwebtoken::{Algorithm, Validation};
@@ -48,7 +48,7 @@ define_cookie_extractor!(CfAuthCookie, "CF_Authorization");
 /// This is a state struct that holds the JWT decoder
 #[derive(Clone, FromRef)]
 struct AppState {
-    decoder: JwtDecoderState<CloudflareAccessClaims>,
+    decoder: Decoder<CloudflareAccessClaims>,
 }
 
 /// Public route - no authentication required
@@ -127,9 +127,7 @@ async fn main() {
 
     // Create application state
     let state = AppState {
-        decoder: JwtDecoderState {
-            decoder: decoder.clone(),
-        },
+        decoder: decoder.clone(),
     };
 
     // Build the application with routes

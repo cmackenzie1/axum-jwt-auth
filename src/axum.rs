@@ -18,7 +18,32 @@ use crate::Decoder;
 /// Extracts and validates JWT tokens from HTTP requests. The generic parameter `T` represents
 /// your claims type, and `E` specifies the token extraction strategy (defaults to `BearerTokenExtractor`).
 ///
-/// # Examples
+/// # State Setup
+///
+/// Use `Decoder<T>` directly in your application state with `FromRef`:
+///
+/// ```ignore
+/// use axum::extract::FromRef;
+/// use axum_jwt_auth::{Decoder, LocalDecoder};
+/// use std::sync::Arc;
+///
+/// #[derive(Clone, FromRef)]
+/// struct AppState {
+///     decoder: Decoder<MyClaims>,
+/// }
+///
+/// let decoder = LocalDecoder::builder()
+///     .keys(keys)
+///     .validation(validation)
+///     .build()
+///     .unwrap();
+///
+/// let state = AppState {
+///     decoder: Arc::new(decoder),
+/// };
+/// ```
+///
+/// # Handler Examples
 ///
 /// ```ignore
 /// // Default: Extract from Authorization: Bearer <token>
@@ -188,7 +213,7 @@ impl<C: ExtractorConfig> TokenExtractor for CookieTokenExtractor<C> {
 
 impl<S, T, E> axum::extract::FromRequestParts<S> for Claims<T, E>
 where
-    JwtDecoderState<T>: FromRef<S>,
+    Decoder<T>: FromRef<S>,
     S: Send + Sync,
     T: DeserializeOwned,
     E: TokenExtractor,
@@ -198,13 +223,8 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let token = E::extract_token(parts).await?;
 
-        let state = JwtDecoderState::from_ref(state);
-        let token_data = state
-            .decoder
-            .clone()
-            .decode(&token)
-            .await
-            .map_err(map_jwt_error)?;
+        let decoder = Decoder::from_ref(state);
+        let token_data = decoder.decode(&token).await.map_err(map_jwt_error)?;
 
         Ok(Claims {
             claims: token_data.claims,
@@ -309,21 +329,6 @@ impl IntoResponse for AuthError {
         };
 
         (status, msg).into_response()
-    }
-}
-
-/// Wrapper for JWT decoders to be used as Axum application state.
-///
-/// Use this with `FromRef` to extract the decoder in handlers that require `Claims<T>`.
-#[derive(Clone)]
-pub struct JwtDecoderState<T> {
-    /// The JWT decoder instance (typically `Arc<LocalDecoder>` or `Arc<RemoteJwksDecoder>`)
-    pub decoder: Decoder<T>,
-}
-
-impl<T> FromRef<JwtDecoderState<T>> for Decoder<T> {
-    fn from_ref(state: &JwtDecoderState<T>) -> Self {
-        state.decoder.clone()
     }
 }
 
