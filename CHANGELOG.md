@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.3] - 2025-01-25
+
+### 🐛 Bug Fixes
+
+- Fix race condition in remote JWKS cache update ([#35](https://github.com/cmackenzie1/axum-jwt-auth/issues/35))
+
 ## [0.6.2] - 2025-11-15
 
 ### 🚀 Features
