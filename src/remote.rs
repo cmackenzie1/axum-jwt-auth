@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -224,7 +225,7 @@ impl RemoteJwksDecoder {
             .json::<JwkSet>()
             .await?;
 
-        // Parse all keys first before clearing cache
+        // Parse all keys first before updating cache
         let mut new_keys = Vec::new();
         for jwk in jwks.keys.iter() {
             let key_id = jwk.common.key_id.to_owned();
@@ -232,11 +233,16 @@ impl RemoteJwksDecoder {
             new_keys.push((key_id.unwrap_or_default(), key));
         }
 
-        // Only clear and update cache after all keys parsed successfully
-        self.keys_cache.clear();
+        // Collect the key IDs we're keeping
+        let keys_to_keep: HashSet<String> = new_keys.iter().map(|(kid, _)| kid.clone()).collect();
+
+        // Insert new keys first (overwrites existing keys in-place, avoiding race condition)
         for (kid, key) in new_keys {
             self.keys_cache.insert(kid, key);
         }
+
+        // Remove stale keys that are no longer in the JWKS
+        self.keys_cache.retain(|kid, _| keys_to_keep.contains(kid));
 
         Ok(())
     }
