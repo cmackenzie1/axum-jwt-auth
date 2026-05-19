@@ -20,7 +20,7 @@ axum = { version = "0.8", features = ["macros"] }
 axum-extra = { version = "0.12", features = ["typed-header", "cookie"] }
 dashmap = "6.1.0"
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 tokio = { version = "1", default-features = false, features = ["time"] }
