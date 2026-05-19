@@ -156,8 +156,9 @@ impl RemoteJwksDecoder {
     /// shutdown_token.cancel();
     /// ```
     pub async fn initialize(&self) -> Result<CancellationToken, Error> {
-        // Fetch keys immediately
+        tracing::info!(jwks_url = %self.jwks_url, "initializing JWKS decoder");
         self.refresh_keys().await?;
+        tracing::info!("JWKS decoder initialized, starting background refresh task");
 
         // Create cancellation token for graceful shutdown
         let shutdown_token = CancellationToken::new();
@@ -199,8 +200,14 @@ impl RemoteJwksDecoder {
             match self.refresh_keys_once().await {
                 Ok(_) => return Ok(()),
                 Err(e) => {
-                    err = Some(e);
                     attempt += 1;
+                    tracing::warn!(
+                        attempt,
+                        max_attempts,
+                        error = %e,
+                        "JWKS fetch attempt failed"
+                    );
+                    err = Some(e);
                     tokio::time::sleep(self.config.backoff).await;
                 }
             }
@@ -229,7 +236,10 @@ impl RemoteJwksDecoder {
         let mut new_keys = Vec::new();
         for jwk in jwks.keys.iter() {
             let key_id = jwk.common.key_id.to_owned();
-            let key = DecodingKey::from_jwk(jwk).map_err(Error::Jwt)?;
+            let key = DecodingKey::from_jwk(jwk).map_err(|e| {
+                tracing::warn!(kid = ?key_id, error = %e, "failed to parse JWK");
+                Error::Jwt(e)
+            })?;
             new_keys.push((key_id.unwrap_or_default(), key));
         }
 
@@ -284,15 +294,14 @@ impl RemoteJwksDecoder {
                     break;
                 }
                 _ = tokio::time::sleep(self.config.cache_duration) => {
-                    tracing::info!("Refreshing JWKS");
+                    tracing::debug!("refreshing JWKS keys");
                     match self.refresh_keys().await {
                         Ok(_) => {}
                         Err(err) => {
-                            // log the error and continue with stale keys
                             tracing::error!(
-                                "Failed to refresh JWKS after {} attempts: {:?}",
-                                self.config.retry_count,
-                                err
+                                error = %err,
+                                retry_count = self.config.retry_count,
+                                "failed to refresh JWKS, continuing with stale keys"
                             );
                         }
                     }
@@ -309,6 +318,7 @@ impl RemoteJwksDecoder {
     /// that `initialize()` was never called.
     fn check_initialized(&self) -> Result<(), Error> {
         if self.keys_cache.is_empty() {
+            tracing::warn!("JWKS key cache is empty; initialize() may not have been called");
             Err(Error::Configuration(
                 "JWKS decoder not initialized: call initialize() after building the decoder".into(),
             ))
@@ -419,20 +429,25 @@ where
     {
         Box::pin(async move {
             self.check_initialized()?;
-            let header = jsonwebtoken::decode_header(token)?;
+
+            let header = jsonwebtoken::decode_header(token).map_err(|e| {
+                tracing::debug!(error = %e, "failed to decode JWT header");
+                Error::Jwt(e)
+            })?;
             let target_kid = header.kid;
 
             if let Some(ref kid) = target_kid {
                 if let Some(key) = self.keys_cache.get(kid) {
-                    Ok(jsonwebtoken::decode::<T>(
-                        token,
-                        key.value(),
-                        &self.validation,
-                    )?)
+                    jsonwebtoken::decode::<T>(token, key.value(), &self.validation).map_err(|e| {
+                        tracing::debug!(kid = %kid, error = %e, "JWT validation failed");
+                        Error::Jwt(e)
+                    })
                 } else {
+                    tracing::warn!(kid = %kid, "JWT key ID not found in cache");
                     Err(Error::KeyNotFound(Some(kid.clone())))
                 }
             } else {
+                tracing::warn!("JWT token has no key ID (kid)");
                 Err(Error::KeyNotFound(None))
             }
         })
