@@ -121,7 +121,7 @@ where
                 match jsonwebtoken::decode::<T>(token, key, &self.validation) {
                     Ok(token_data) => return Ok(token_data),
                     Err(e) => {
-                        tracing::error!("Error decoding token: {}", e);
+                        tracing::debug!(error = %e, "failed to decode token with key");
                         last_error = Some(Error::Jwt(e));
                     }
                 }
