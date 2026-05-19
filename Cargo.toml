@@ -10,8 +10,8 @@ repository = "https://github.com/cmackenzie1/axum-jwt-auth"
 
 [features]
 default = ["rustls-tls"]
-rustls-tls = ["reqwest/rustls-tls"]
-rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]
+rustls-tls = ["reqwest/rustls"]
+rustls-tls-native-roots = ["reqwest/rustls-native-certs"]
 native-tls = ["reqwest/native-tls"]
 native-tls-vendored = ["reqwest/native-tls-vendored"]
 
