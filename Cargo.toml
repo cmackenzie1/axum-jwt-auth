@@ -2,7 +2,7 @@
 name = "axum-jwt-auth"
 version = "0.7.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 authors = ["Cole MacKenzie"]
 description = "A simple JWT authentication middleware for Axum"
 license = "MIT"
@@ -19,7 +19,7 @@ native-tls-vendored = ["reqwest/native-tls-vendored"]
 axum = { version = "0.8", features = ["macros"] }
 axum-extra = { version = "0.12", features = ["typed-header", "cookie"] }
 dashmap = "6.1.0"
-jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+jsonwebtoken = { version = "11", features = ["rust_crypto"] }
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
@@ -35,7 +35,7 @@ tokio = { version = "1", default-features = false, features = [
 ] }
 serde_json = "1"
 tracing-subscriber = "0.3.19"
-rand = { version = "0.9.0", features = ["small_rng"] }
+rand = "0.10.2"
 
 [[example]]
 name = "local"
