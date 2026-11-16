@@ -19,7 +19,7 @@ native-tls-vendored = ["reqwest/native-tls-vendored"]
 axum = { version = "0.8", features = ["macros"] }
 axum-extra = { version = "0.12", features = ["typed-header", "cookie"] }
 dashmap = "6.1.0"
-jsonwebtoken = { version = "11", features = ["rust_crypto"] }
+jsonwebtoken = { version = "12", features = ["rust_crypto"] }
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
