@@ -11,31 +11,31 @@ repository = "https://github.com/cmackenzie1/axum-jwt-auth"
 [features]
 default = ["rustls-tls"]
 rustls-tls = ["reqwest/rustls"]
-rustls-tls-native-roots = ["reqwest/rustls-native-certs"]
+rustls-tls-native-roots = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
 native-tls-vendored = ["reqwest/native-tls-vendored"]
 
 [dependencies]
-axum = { version = "0.8", features = ["macros"] }
-axum-extra = { version = "0.12", features = ["typed-header", "cookie"] }
-dashmap = "6.1.0"
+axum = { version = "0.8.9", features = ["macros"] }
+axum-extra = { version = "0.12.6", features = ["typed-header", "cookie"] }
+dashmap = "6.2.1"
 jsonwebtoken = { version = "12", features = ["rust_crypto"] }
-reqwest = { version = "0.13", default-features = false, features = ["json"] }
-serde = { version = "1", features = ["derive"] }
-thiserror = "2"
-tokio = { version = "1", default-features = false, features = ["time"] }
-tokio-util = "0.7"
-tracing = { version = "0.1", features = ["log"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", default-features = false, features = ["time"] }
+tokio-util = "0.7.20"
+tracing = { version = "0.1.44", features = ["log"] }
 
 [dev-dependencies]
-chrono = "0.4"
-tokio = { version = "1", default-features = false, features = [
+chrono = "0.4.45"
+tokio = { version = "1.54.1", default-features = false, features = [
     "rt-multi-thread",
     "macros",
 ] }
-serde_json = "1"
-tracing-subscriber = "0.3.19"
-rand = "0.10.2"
+serde_json = "1.0.154"
+tracing-subscriber = "0.3.23"
+rand = "0.10.4"
 
 [[example]]
 name = "local"
